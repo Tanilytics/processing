@@ -1,0 +1,23 @@
+[tools]
+go = "1.26"
+air = "latest"
+
+[env]
+CGO_ENABLED = "0"
+GOCACHE = "{{env.HOME}}/.cache/go-build"
+
+[tasks.dev]
+run = "air"
+description = "Hot reload Fiber API"
+
+[tasks.build]
+run = "go build -ldflags='-s -w' -o bin/app"
+
+[tasks.start]
+run = "./bin/app"
+
+[tasks.test]
+run = "go test ./..."
+
+[tasks.clean]
+run = "rm -rf tmp bin"

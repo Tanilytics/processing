@@ -1,7 +1,8 @@
 .git
 .gitignore
 README.md
-processing
+bin/
+tmp/
 *.exe
 *.exe~
 *.dll

@@ -9,7 +9,7 @@ COPY main.go .
 
 RUN CGO_ENABLED=0 GOOS=linux go build \
     -ldflags="-s -w" \
-    -o processing \
+    -o app \
     .
 
 FROM alpine:latest
@@ -26,4 +26,4 @@ USER appuser
 
 EXPOSE 3000
 
-CMD ["./processing"]
+CMD ["./app"]
