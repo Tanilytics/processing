@@ -1,10 +1,12 @@
 [tools]
 go = "1.26"
 air = "latest"
+golangci-lint = "2.11.3"
 
 [env]
 CGO_ENABLED = "0"
 GOCACHE = "{{env.HOME}}/.cache/go-build"
+_.file = { path = ".env" }
 
 [tasks.dev]
 run = "air"
