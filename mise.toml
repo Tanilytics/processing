@@ -13,10 +13,10 @@ run = "air"
 description = "Hot reload Fiber API"
 
 [tasks.build]
-run = "go build -ldflags='-s -w' -o bin/app"
+run = "go build -ldflags='-s -w' -o bin/processor ./cmd/processor/"
 
 [tasks.start]
-run = "./bin/app"
+run = "./bin/processor"
 
 [tasks.test]
 run = "go test ./..."
