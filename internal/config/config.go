@@ -6,6 +6,7 @@ import (
 )
 
 type ProcessorConfig struct {
+	Port                 string
 	RedpandaBrokers      []string
 	RedpandaSASLUser     string
 	RedpandaSASLPassword string
@@ -20,6 +21,7 @@ type ProcessorConfig struct {
 
 func LoadProcessorConfig() ProcessorConfig {
 	return ProcessorConfig{
+		Port:                  getEnv("PROCESSING_PORT", ":3000"),
 		RedpandaBrokers:       strings.Split(getEnv("REDPANDA_BROKERS", "localhost:19092"), ","),
 		RedpandaSASLUser:      getEnv("REDPANDA_SASL_USER", ""),
 		RedpandaSASLPassword:  getEnv("REDPANDA_SASL_PASSWORD", ""),
