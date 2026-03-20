@@ -1,6 +1,7 @@
 package config
 
 import (
+	"log"
 	"os"
 	"strings"
 )
@@ -22,21 +23,24 @@ type ProcessorConfig struct {
 
 func LoadProcessorConfig() ProcessorConfig {
 	return ProcessorConfig{
-		Port:                  getEnv("PROCESSING_PORT", ":3000"),
-		RedpandaBrokers:       strings.Split(getEnv("REDPANDA_BROKERS", "localhost:19092"), ","),
-		RedpandaSASLUser:      getEnv("REDPANDA_SASL_USER", ""),
-		RedpandaSASLPassword:  getEnv("REDPANDA_SASL_PASSWORD", ""),
-		RedpandaSASLMechanism: getEnv("REDPANDA_SASL_MECHANISM", "SCRAM-SHA-256"),
-		RedisURL:              getEnv("REDIS_URL", "redis://localhost:6379"),
-		LogLevel:              getEnv("LOG_LEVEL", "info"),
-		OTelEndpoint:          getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4318"),
-		ConsumerGroup:         getEnv("CONSUMER_GROUP", "event-processor"),
+		Port:                  getEnv("PROCESSING_PORT"),
+		RedpandaBrokers:       strings.Split(getEnv("REDPANDA_BROKERS"), ","),
+		RedpandaSASLUser:      getEnv("REDPANDA_SASL_USER"),
+		RedpandaSASLPassword:  getEnv("REDPANDA_SASL_PASSWORD"),
+		RedpandaSASLMechanism: getEnv("REDPANDA_SASL_MECHANISM"),
+		RedisURL:              getEnv("REDIS_URL"),
+		LogLevel:              getEnv("LOG_LEVEL"),
+		OTelEndpoint:          getEnv("OTEL_EXPORTER_OTLP_ENDPOINT"),
+		ConsumerGroup:         getEnv("CONSUMER_GROUP"),
 	}
 }
 
-func getEnv(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
+func getEnv(key string) string {
+	v, ok := os.LookupEnv(key)
+	if !ok || v == "" {
+		log.Printf("missing required environment variable: %s", key)
+		os.Exit(1)
 	}
-	return fallback
+
+	return v
 }
