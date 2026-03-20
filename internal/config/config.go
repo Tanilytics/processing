@@ -17,6 +17,7 @@ type ProcessorConfig struct {
 	RedisURL              string
 	LogLevel              string
 	OTelEndpoint          string
+	ConsumerGroup         string
 }
 
 func LoadProcessorConfig() ProcessorConfig {
@@ -29,6 +30,7 @@ func LoadProcessorConfig() ProcessorConfig {
 		RedisURL:              getEnv("REDIS_URL", "redis://localhost:6379"),
 		LogLevel:              getEnv("LOG_LEVEL", "info"),
 		OTelEndpoint:          getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4318"),
+		ConsumerGroup:         getEnv("CONSUMER_GROUP", "event-processor"),
 	}
 }
 
