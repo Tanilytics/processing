@@ -13,6 +13,8 @@ import (
 	"github.com/Tanilytics/processing/internal/config"
 	"github.com/Tanilytics/processing/internal/consumer"
 	"github.com/Tanilytics/processing/internal/observability"
+	"github.com/Tanilytics/processing/internal/pipeline"
+	"github.com/Tanilytics/processing/internal/processors"
 	"github.com/Tanilytics/processing/internal/server"
 	"github.com/rs/zerolog"
 )
@@ -44,12 +46,17 @@ func main() {
 	app := server.NewServer(cfg.Port)
 
 	// 5. Initialize event consumer
+	anonymizer := processors.NewAnonymizer(cfg.IPHashSalt)
+	uaParser := processors.NewUserAgentParser()
+	processorPipeline := pipeline.NewPipeline(anonymizer, uaParser, logger)
+
 	eventConsumer, err := consumer.NewEventConsumer(
 		cfg.RedpandaBrokers,
 		cfg.ConsumerGroup,
 		cfg.RedpandaSASLUser,
 		cfg.RedpandaSASLPassword,
 		cfg.RedpandaSASLMechanism,
+		processorPipeline,
 		logger,
 	)
 	if err != nil {

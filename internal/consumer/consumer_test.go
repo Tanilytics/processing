@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/Tanilytics/processing/internal/models"
+	"github.com/Tanilytics/processing/internal/pipeline"
+	"github.com/Tanilytics/processing/internal/processors"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -20,11 +22,12 @@ func TestNewEventConsumerWithoutSASL(t *testing.T) {
 	logger := zerolog.Nop()
 	brokers := []string{testBroker}
 
-	consumer, err := NewEventConsumer(brokers, testGroupID, "", "", "", &logger)
+	consumer, err := NewEventConsumer(brokers, testGroupID, "", "", "", testPipeline(), &logger)
 
 	require.NoError(t, err)
 	assert.NotNil(t, consumer)
 	assert.NotNil(t, consumer.client)
+	assert.NotNil(t, consumer.pipeline)
 	assert.NotNil(t, consumer.logger)
 }
 
@@ -32,7 +35,7 @@ func TestNewEventConsumerWithSASLSHA256(t *testing.T) {
 	logger := zerolog.Nop()
 	brokers := []string{testBroker}
 
-	consumer, err := NewEventConsumer(brokers, testGroupID, "user", "pass", "SCRAM-SHA-256", &logger)
+	consumer, err := NewEventConsumer(brokers, testGroupID, "user", "pass", "SCRAM-SHA-256", testPipeline(), &logger)
 
 	require.NoError(t, err)
 	assert.NotNil(t, consumer)
@@ -43,7 +46,7 @@ func TestNewEventConsumerWithSASLSHA512(t *testing.T) {
 	logger := zerolog.Nop()
 	brokers := []string{testBroker}
 
-	consumer, err := NewEventConsumer(brokers, testGroupID, "user", "pass", "SCRAM-SHA-512", &logger)
+	consumer, err := NewEventConsumer(brokers, testGroupID, "user", "pass", "SCRAM-SHA-512", testPipeline(), &logger)
 
 	require.NoError(t, err)
 	assert.NotNil(t, consumer)
@@ -54,7 +57,7 @@ func TestNewEventConsumerWithEmptyMechanismFallsBackToSHA256(t *testing.T) {
 	logger := zerolog.Nop()
 	brokers := []string{testBroker}
 
-	consumer, err := NewEventConsumer(brokers, testGroupID, "user", "pass", "", &logger)
+	consumer, err := NewEventConsumer(brokers, testGroupID, "user", "pass", "", testPipeline(), &logger)
 
 	require.NoError(t, err)
 	assert.NotNil(t, consumer)
@@ -64,7 +67,7 @@ func TestNewEventConsumerWithUnknownMechanismFallsBackToSHA256(t *testing.T) {
 	logger := zerolog.Nop()
 	brokers := []string{testBroker}
 
-	consumer, err := NewEventConsumer(brokers, testGroupID, "user", "pass", "UNKNOWN-MECH", &logger)
+	consumer, err := NewEventConsumer(brokers, testGroupID, "user", "pass", "UNKNOWN-MECH", testPipeline(), &logger)
 
 	require.NoError(t, err)
 	assert.NotNil(t, consumer)
@@ -74,7 +77,7 @@ func TestNewEventConsumerWithMultipleBrokers(t *testing.T) {
 	logger := zerolog.Nop()
 	brokers := []string{"broker1:9092", "broker2:9092", "broker3:9092"}
 
-	consumer, err := NewEventConsumer(brokers, testGroupID, "", "", "", &logger)
+	consumer, err := NewEventConsumer(brokers, testGroupID, "", "", "", testPipeline(), &logger)
 
 	require.NoError(t, err)
 	assert.NotNil(t, consumer)
@@ -84,7 +87,7 @@ func TestEventConsumerClose(t *testing.T) {
 	logger := zerolog.Nop()
 	brokers := []string{testBroker}
 
-	consumer, err := NewEventConsumer(brokers, testGroupID, "", "", "", &logger)
+	consumer, err := NewEventConsumer(brokers, testGroupID, "", "", "", testPipeline(), &logger)
 	require.NoError(t, err)
 
 	assert.NotPanics(t, func() {
@@ -190,7 +193,7 @@ func TestRunContextCancellation(t *testing.T) {
 	logger := zerolog.Nop()
 	brokers := []string{testBroker}
 
-	consumer, err := NewEventConsumer(brokers, testGroupID, "", "", "", &logger)
+	consumer, err := NewEventConsumer(brokers, testGroupID, "", "", "", testPipeline(), &logger)
 	require.NoError(t, err)
 	defer consumer.Close()
 
@@ -199,4 +202,13 @@ func TestRunContextCancellation(t *testing.T) {
 
 	err = consumer.Run(ctx)
 	assert.ErrorIs(t, err, context.Canceled)
+}
+
+func testPipeline() *pipeline.Pipeline {
+	logger := zerolog.Nop()
+	return pipeline.NewPipeline(
+		processors.NewAnonymizer("test-salt"),
+		processors.NewUserAgentParser(),
+		&logger,
+	)
 }

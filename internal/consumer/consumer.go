@@ -5,17 +5,19 @@ import (
 	"encoding/json"
 
 	"github.com/Tanilytics/processing/internal/models"
+	"github.com/Tanilytics/processing/internal/pipeline"
 	"github.com/rs/zerolog"
 	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/twmb/franz-go/pkg/sasl/scram"
 )
 
 type EventConsumer struct {
-	client *kgo.Client
-	logger *zerolog.Logger
+	client   *kgo.Client
+	pipeline *pipeline.Pipeline
+	logger   *zerolog.Logger
 }
 
-func NewEventConsumer(brokers []string, groupID, saslUser, saslPassword, saslMechanism string, logger *zerolog.Logger) (*EventConsumer, error) {
+func NewEventConsumer(brokers []string, groupID, saslUser, saslPassword, saslMechanism string, p *pipeline.Pipeline, logger *zerolog.Logger) (*EventConsumer, error) {
 	opts := []kgo.Opt{
 		kgo.SeedBrokers(brokers...),
 		kgo.ConsumerGroup(groupID),
@@ -45,7 +47,7 @@ func NewEventConsumer(brokers []string, groupID, saslUser, saslPassword, saslMec
 	if err != nil {
 		return nil, err
 	}
-	return &EventConsumer{client: client, logger: logger}, nil
+	return &EventConsumer{client: client, pipeline: p, logger: logger}, nil
 }
 
 func (c *EventConsumer) Run(ctx context.Context) error {
@@ -79,8 +81,14 @@ func (c *EventConsumer) Run(ctx context.Context) error {
 		})
 
 		if len(events) > 0 {
-			// Process Events
-			c.logger.Info().Int("events_count", len(events)).Msg("process events")
+			if err := c.pipeline.Process(ctx, events); err != nil {
+				c.logger.Error().
+					Err(err).
+					Int("batch_size", len(events)).
+					Msg("pipeline processing failed")
+				// Don't commit offsets, will retry on next poll
+				continue
+			}
 		}
 
 		// Commit offsets after successful processing
