@@ -11,11 +11,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const (
+	testBroker  = "localhost:9092"
+	testGroupID = "test-group"
+)
+
 func TestNewEventConsumerWithoutSASL(t *testing.T) {
 	logger := slog.Default()
-	brokers := []string{"localhost:9092"}
+	brokers := []string{testBroker}
 
-	consumer, err := NewEventConsumer(brokers, "test-group", "", "", "", logger)
+	consumer, err := NewEventConsumer(brokers, testGroupID, "", "", "", logger)
 
 	require.NoError(t, err)
 	assert.NotNil(t, consumer)
@@ -25,9 +30,9 @@ func TestNewEventConsumerWithoutSASL(t *testing.T) {
 
 func TestNewEventConsumerWithSASLSHA256(t *testing.T) {
 	logger := slog.Default()
-	brokers := []string{"localhost:9092"}
+	brokers := []string{testBroker}
 
-	consumer, err := NewEventConsumer(brokers, "test-group", "user", "pass", "SCRAM-SHA-256", logger)
+	consumer, err := NewEventConsumer(brokers, testGroupID, "user", "pass", "SCRAM-SHA-256", logger)
 
 	require.NoError(t, err)
 	assert.NotNil(t, consumer)
@@ -36,9 +41,9 @@ func TestNewEventConsumerWithSASLSHA256(t *testing.T) {
 
 func TestNewEventConsumerWithSASLSHA512(t *testing.T) {
 	logger := slog.Default()
-	brokers := []string{"localhost:9092"}
+	brokers := []string{testBroker}
 
-	consumer, err := NewEventConsumer(brokers, "test-group", "user", "pass", "SCRAM-SHA-512", logger)
+	consumer, err := NewEventConsumer(brokers, testGroupID, "user", "pass", "SCRAM-SHA-512", logger)
 
 	require.NoError(t, err)
 	assert.NotNil(t, consumer)
@@ -47,9 +52,9 @@ func TestNewEventConsumerWithSASLSHA512(t *testing.T) {
 
 func TestNewEventConsumerWithEmptyMechanismFallsBackToSHA256(t *testing.T) {
 	logger := slog.Default()
-	brokers := []string{"localhost:9092"}
+	brokers := []string{testBroker}
 
-	consumer, err := NewEventConsumer(brokers, "test-group", "user", "pass", "", logger)
+	consumer, err := NewEventConsumer(brokers, testGroupID, "user", "pass", "", logger)
 
 	require.NoError(t, err)
 	assert.NotNil(t, consumer)
@@ -57,9 +62,9 @@ func TestNewEventConsumerWithEmptyMechanismFallsBackToSHA256(t *testing.T) {
 
 func TestNewEventConsumerWithUnknownMechanismFallsBackToSHA256(t *testing.T) {
 	logger := slog.Default()
-	brokers := []string{"localhost:9092"}
+	brokers := []string{testBroker}
 
-	consumer, err := NewEventConsumer(brokers, "test-group", "user", "pass", "UNKNOWN-MECH", logger)
+	consumer, err := NewEventConsumer(brokers, testGroupID, "user", "pass", "UNKNOWN-MECH", logger)
 
 	require.NoError(t, err)
 	assert.NotNil(t, consumer)
@@ -69,7 +74,7 @@ func TestNewEventConsumerWithMultipleBrokers(t *testing.T) {
 	logger := slog.Default()
 	brokers := []string{"broker1:9092", "broker2:9092", "broker3:9092"}
 
-	consumer, err := NewEventConsumer(brokers, "test-group", "", "", "", logger)
+	consumer, err := NewEventConsumer(brokers, testGroupID, "", "", "", logger)
 
 	require.NoError(t, err)
 	assert.NotNil(t, consumer)
@@ -77,9 +82,9 @@ func TestNewEventConsumerWithMultipleBrokers(t *testing.T) {
 
 func TestEventConsumerClose(t *testing.T) {
 	logger := slog.Default()
-	brokers := []string{"localhost:9092"}
+	brokers := []string{testBroker}
 
-	consumer, err := NewEventConsumer(brokers, "test-group", "", "", "", logger)
+	consumer, err := NewEventConsumer(brokers, testGroupID, "", "", "", logger)
 	require.NoError(t, err)
 
 	assert.NotPanics(t, func() {
@@ -183,9 +188,9 @@ func TestInternalEventUnmarshalInvalidEventType(t *testing.T) {
 
 func TestRunContextCancellation(t *testing.T) {
 	logger := slog.Default()
-	brokers := []string{"localhost:9092"}
+	brokers := []string{testBroker}
 
-	consumer, err := NewEventConsumer(brokers, "test-group", "", "", "", logger)
+	consumer, err := NewEventConsumer(brokers, testGroupID, "", "", "", logger)
 	require.NoError(t, err)
 	defer consumer.Close()
 
