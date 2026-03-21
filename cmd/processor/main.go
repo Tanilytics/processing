@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -15,6 +14,7 @@ import (
 	"github.com/Tanilytics/processing/internal/consumer"
 	"github.com/Tanilytics/processing/internal/observability"
 	"github.com/Tanilytics/processing/internal/server"
+	"github.com/rs/zerolog"
 )
 
 func main() {
@@ -23,11 +23,11 @@ func main() {
 
 	// 2. Init structured logger
 	logger := observability.NewLogger("processor-service", cfg.LogLevel)
-	logger.Info("starting processor service",
-		"port", cfg.Port,
-		"brokers", cfg.RedpandaBrokers,
-		"redis_url", cfg.RedisURL,
-	)
+	logger.Info().
+		Str("port", cfg.Port).
+		Strs("brokers", cfg.RedpandaBrokers).
+		Str("redis_url", cfg.RedisURL).
+		Msg("starting processor service")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -35,7 +35,7 @@ func main() {
 	// 3. Init OTel Tracer
 	shutdownTracer, err := observability.InitTracer(ctx, "processor-service", cfg.OTelEndpoint)
 	if err != nil {
-		logger.Error("failed to initialize tracer", "error", err)
+		logger.Error().Err(err).Msg("failed to initialize tracer")
 	} else {
 		defer shutdownTracer()
 	}
@@ -53,7 +53,7 @@ func main() {
 		logger,
 	)
 	if err != nil {
-		logger.Error("failed to initialize consumer", "error", err)
+		logger.Error().Err(err).Msg("failed to initialize consumer")
 		return
 	}
 
@@ -62,54 +62,48 @@ func main() {
 	// 6. Start event consumer in a goroutine
 	consumerWG.Go(func() {
 		if err := eventConsumer.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
-			logger.Error("consumer stopped with error", "error", err)
+			logger.Error().Err(err).Msg("consumer stopped with error")
 			cancel()
 		}
 	})
 
 	// 7. Start HTTP server in a goroutine
 	go func() {
-		logger.Info("http server listening", "addr", cfg.Port)
+		logger.Info().Str("addr", cfg.Port).Msg("http server listening")
 		if err := app.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			logger.Error("http server error", "error", err)
+			logger.Error().Err(err).Msg("http server error")
 			cancel()
 		}
 	}()
 
-	// 8. Mark service as ready
-	server.SetReady()
-	logger.Info("service is ready")
-
-	// 9. Wait for shutdown signal
+	// 8. Wait for shutdown signal
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)
 	defer signal.Stop(sigCh)
 	select {
 	case sig := <-sigCh:
-		logger.Info("received signal, shutting down", "signal", sig)
+		logger.Info().Stringer("signal", sig).Msg("received signal, shutting down")
 	case <-ctx.Done():
-		logger.Info("context cancelled, shutting down")
+		logger.Info().Msg("context cancelled, shutting down")
 	}
 
-	// 10. Graceful shutdown
+	// 9. Graceful shutdown
 	cancel()
 	gracefulShutdown(app, logger)
 	eventConsumer.Close()
 	consumerWG.Wait()
 
-	logger.Info("shutdown complete")
+	logger.Info().Msg("shutdown complete")
 }
 
 func gracefulShutdown(
 	app interface{ Shutdown(context.Context) error },
-	logger *slog.Logger,
+	logger *zerolog.Logger,
 ) {
-	server.SetNotReady()
-
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer shutdownCancel()
 
 	if err := app.Shutdown(shutdownCtx); err != nil {
-		logger.Error("http server shutdown error", "error", err)
+		logger.Error().Err(err).Msg("http server shutdown error")
 	}
 }

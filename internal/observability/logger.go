@@ -1,27 +1,27 @@
 package observability
 
 import (
-	"log/slog"
 	"os"
+	"strings"
+	"time"
+
+	"github.com/rs/zerolog"
 )
 
-func NewLogger(service, level string) *slog.Logger {
-	var lvl slog.Level
-	switch level {
-	case "debug":
-		lvl = slog.LevelDebug
-	case "warn":
-		lvl = slog.LevelWarn
-	case "error":
-		lvl = slog.LevelError
-	default:
-		lvl = slog.LevelInfo
+func NewLogger(service, level string) *zerolog.Logger {
+	lvl, err := zerolog.ParseLevel(strings.ToLower(level))
+	if err != nil {
+		lvl = zerolog.InfoLevel
 	}
 
-	handler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-		Level: lvl,
-	})
-	return slog.New(handler).With(
-		"service", service,
-	)
+	zerolog.TimeFieldFormat = time.RFC3339Nano
+
+	logger := zerolog.New(os.Stdout).
+		Level(lvl).
+		With().
+		Timestamp().
+		Str("service", service).
+		Logger()
+
+	return &logger
 }

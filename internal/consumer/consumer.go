@@ -3,19 +3,19 @@ package consumer
 import (
 	"context"
 	"encoding/json"
-	"log/slog"
 
 	"github.com/Tanilytics/processing/internal/models"
+	"github.com/rs/zerolog"
 	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/twmb/franz-go/pkg/sasl/scram"
 )
 
 type EventConsumer struct {
 	client *kgo.Client
-	logger *slog.Logger
+	logger *zerolog.Logger
 }
 
-func NewEventConsumer(brokers []string, groupID, saslUser, saslPassword, saslMechanism string, logger *slog.Logger) (*EventConsumer, error) {
+func NewEventConsumer(brokers []string, groupID, saslUser, saslPassword, saslMechanism string, logger *zerolog.Logger) (*EventConsumer, error) {
 	opts := []kgo.Opt{
 		kgo.SeedBrokers(brokers...),
 		kgo.ConsumerGroup(groupID),
@@ -56,11 +56,11 @@ func (c *EventConsumer) Run(ctx context.Context) error {
 		}
 		if errs := fetches.Errors(); len(errs) > 0 {
 			for _, e := range errs {
-				c.logger.Error("fetch error",
-					"topic", e.Topic,
-					"partition", e.Partition,
-					"err", e.Err,
-				)
+				c.logger.Error().
+					Str("topic", e.Topic).
+					Int32("partition", e.Partition).
+					Err(e.Err).
+					Msg("fetch error")
 			}
 		}
 
@@ -68,11 +68,11 @@ func (c *EventConsumer) Run(ctx context.Context) error {
 		fetches.EachRecord(func(record *kgo.Record) {
 			var event models.InternalEvent
 			if err := json.Unmarshal(record.Value, &event); err != nil {
-				c.logger.Error("unmarshal event",
-					"err", err,
-					"partition", record.Partition,
-					"offset", record.Offset,
-				)
+				c.logger.Error().
+					Err(err).
+					Int32("partition", record.Partition).
+					Int64("offset", record.Offset).
+					Msg("unmarshal event")
 				return // skip malformed records (will be DLQ'd when I feel like doing it)
 			}
 			events = append(events, &event)
@@ -80,12 +80,12 @@ func (c *EventConsumer) Run(ctx context.Context) error {
 
 		if len(events) > 0 {
 			// Process Events
-			c.logger.Info("Process Events")
+			c.logger.Info().Int("events_count", len(events)).Msg("process events")
 		}
 
 		// Commit offsets after successful processing
 		if err := c.client.CommitUncommittedOffsets(ctx); err != nil {
-			c.logger.Error("offset commit failed", "err", err)
+			c.logger.Error().Err(err).Msg("offset commit failed")
 		}
 	}
 }
