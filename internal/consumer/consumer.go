@@ -174,7 +174,7 @@ func (c *EventConsumer) handleShutdown(ctx context.Context, batch *consumerBatch
 		return ctx.Err()
 	}
 
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer shutdownCancel()
 
 	if err := c.flushPending(shutdownCtx, batch.pending); err != nil {
@@ -200,7 +200,7 @@ func (c *EventConsumer) flushReadyBatch(ctx context.Context, batch *consumerBatc
 
 func (c *EventConsumer) pollFetches(ctx context.Context, batch *consumerBatch) (kgo.Fetches, error, bool) {
 	pollCtx := ctx
-	cancel := func() {}
+	var cancel context.CancelFunc
 	if len(batch.pending) > 0 {
 		remaining := time.Until(batch.startedAt.Add(c.batchTimeout))
 		if remaining <= 0 {
@@ -212,7 +212,9 @@ func (c *EventConsumer) pollFetches(ctx context.Context, batch *consumerBatch) (
 
 	fetches := c.client.PollFetches(pollCtx)
 	pollErr := pollCtx.Err()
-	cancel()
+	if cancel != nil {
+		cancel()
+	}
 
 	if ctx.Err() != nil {
 		return fetches, pollErr, false
