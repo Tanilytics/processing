@@ -8,6 +8,7 @@ import (
 	"github.com/Tanilytics/processing/internal/models"
 	"github.com/Tanilytics/processing/internal/pipeline"
 	"github.com/Tanilytics/processing/internal/processors"
+	"github.com/Tanilytics/processing/internal/storage"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -205,10 +206,15 @@ func TestRunContextCancellation(t *testing.T) {
 }
 
 func testPipeline() *pipeline.Pipeline {
+	writer, err := storage.NewClickHouseWriter("some-addr", "default", "default", "test-password")
+	if err != nil {
+		panic(err)
+	}
 	logger := zerolog.Nop()
 	return pipeline.NewPipeline(
 		processors.NewAnonymizer("test-salt"),
 		processors.NewUserAgentParser(),
+		writer,
 		&logger,
 	)
 }

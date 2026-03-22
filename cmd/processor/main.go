@@ -50,7 +50,12 @@ func main() {
 	// 5. Initialize event consumer
 	anonymizer := processors.NewAnonymizer(cfg.AnonymizationSalt)
 	uaParser := processors.NewUserAgentParser()
-	chWriter, err := storage.NewClickHouseWriter(cfg.ClickhouseAddr)
+	chWriter, err := storage.NewClickHouseWriter(
+		cfg.ClickhouseAddr,
+		cfg.ClickhouseDatabase,
+		cfg.ClickhouseUsername,
+		cfg.ClickhousePassword,
+	)
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to initialize clickhouse writer")
 		return

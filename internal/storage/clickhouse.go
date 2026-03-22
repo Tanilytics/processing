@@ -12,9 +12,14 @@ type ClickHouseWriter struct {
 	conn clickhouse.Conn
 }
 
-func NewClickHouseWriter(dsn string) (*ClickHouseWriter, error) {
+func NewClickHouseWriter(addr, database, username, password string) (*ClickHouseWriter, error) {
 	conn, err := clickhouse.Open(&clickhouse.Options{
-		Addr: []string{dsn},
+		Addr: []string{addr},
+		Auth: clickhouse.Auth{
+			Database: database,
+			Username: username,
+			Password: password,
+		},
 		Settings: clickhouse.Settings{
 			"max_execution_time": 60,
 		},

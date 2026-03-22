@@ -19,6 +19,9 @@ type ProcessorConfig struct {
 	RedpandaSASLMechanism  string
 	ConsumerGroup          string
 	ClickhouseAddr         string
+	ClickhouseDatabase     string
+	ClickhouseUsername     string
+	ClickhousePassword     string
 	ClickhouseBatchSize    int
 	ClickhouseBatchTimeout time.Duration
 	RedisURL               string
@@ -36,6 +39,9 @@ func LoadProcessorConfig() ProcessorConfig {
 		RedpandaSASLMechanism:  getEnv("REDPANDA_SASL_MECHANISM"),
 		ConsumerGroup:          getEnv("CONSUMER_GROUP"),
 		ClickhouseAddr:         getEnv("CLICKHOUSE_ADDR"),
+		ClickhouseDatabase:     getEnv("CLICKHOUSE_DATABASE"),
+		ClickhouseUsername:     getEnv("CLICKHOUSE_USERNAME"),
+		ClickhousePassword:     getEnv("CLICKHOUSE_PASSWORD"),
 		ClickhouseBatchSize:    getPositiveIntEnv("CH_BATCH_SIZE"),
 		ClickhouseBatchTimeout: getDurationEnv("CH_BATCH_TIMEOUT"),
 		RedisURL:               getEnv("REDIS_URL"),

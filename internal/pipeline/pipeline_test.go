@@ -5,6 +5,7 @@ import (
 
 	"github.com/Tanilytics/processing/internal/models"
 	"github.com/Tanilytics/processing/internal/processors"
+	"github.com/Tanilytics/processing/internal/storage"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 )
@@ -37,10 +38,15 @@ func TestParseUUIDDerivesDeterministicUUID(t *testing.T) {
 }
 
 func TestProcessEventDerivesUUIDAndClampsScreenWidth(t *testing.T) {
+	writer, err := storage.NewClickHouseWriter("some-addr", "default", "default", "test-password")
+	if err != nil {
+		t.Fatalf("failed to create writer: %v", err)
+	}
 	logger := zerolog.Nop()
 	p := NewPipeline(
 		processors.NewAnonymizer("test-salt"),
 		processors.NewUserAgentParser(),
+		writer,
 		&logger,
 	)
 
