@@ -4,8 +4,7 @@ import "net/http"
 
 func NewServer(addr string) *http.Server {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/healthz", Healthz)
-	mux.HandleFunc("/readyz", Readyz)
+	mux.HandleFunc("/livez", Healthz)
 
 	return &http.Server{
 		Addr:    addr,
