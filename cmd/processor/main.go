@@ -36,18 +36,10 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// 3. Init OTel Tracer
-	shutdownTracer, err := observability.InitTracer(ctx, "processor-service", cfg.OTelEndpoint)
-	if err != nil {
-		logger.Error().Err(err).Msg("failed to initialize tracer")
-	} else {
-		defer shutdownTracer()
-	}
-
-	// 4. Create HTTP server
+	// 3. Create HTTP server
 	app := server.NewServer(cfg.Port)
 
-	// 5. Initialize event consumer
+	// 4. Initialize event consumer
 	anonymizer := processors.NewAnonymizer(cfg.AnonymizationSalt)
 	uaParser := processors.NewUserAgentParser()
 	chWriter, err := storage.NewClickHouseWriter(
@@ -60,7 +52,6 @@ func main() {
 		logger.Error().Err(err).Msg("failed to initialize clickhouse writer")
 		return
 	}
-	defer chWriter.Close() // nolint: errcheck
 
 	processorPipeline := pipeline.NewPipeline(anonymizer, uaParser, chWriter, logger)
 
@@ -70,6 +61,15 @@ func main() {
 		cfg.RedpandaSASLUser,
 		cfg.RedpandaSASLPassword,
 		cfg.RedpandaSASLMechanism,
+		consumer.Options{
+			Topic:                  cfg.ConsumerTopic,
+			ResetOffset:            cfg.ConsumerResetOffset,
+			FetchMinBytes:          cfg.ConsumerFetchMinBytes,
+			FetchMaxBytes:          cfg.ConsumerFetchMaxBytes,
+			FetchMaxWait:           cfg.ConsumerFetchMaxWait,
+			FetchMaxPartitionBytes: cfg.ConsumerFetchMaxPartitionBytes,
+			MaxConcurrentFetches:   cfg.ConsumerMaxConcurrentFetches,
+		},
 		processorPipeline,
 		logger,
 	)
@@ -80,7 +80,7 @@ func main() {
 
 	var consumerWG sync.WaitGroup
 
-	// 6. Start event consumer in a goroutine
+	// 5. Start event consumer in a goroutine
 	consumerWG.Go(func() {
 		if err := eventConsumer.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
 			logger.Error().Err(err).Msg("consumer stopped with error")
@@ -88,7 +88,7 @@ func main() {
 		}
 	})
 
-	// 7. Start HTTP server in a goroutine
+	// 6. Start HTTP server in a goroutine
 	go func() {
 		logger.Info().Str("addr", cfg.Port).Msg("http server listening")
 		if err := app.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -97,7 +97,7 @@ func main() {
 		}
 	}()
 
-	// 8. Wait for shutdown signal
+	// 7. Wait for shutdown signal
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)
 	defer signal.Stop(sigCh)
@@ -108,11 +108,14 @@ func main() {
 		logger.Info().Msg("context cancelled, shutting down")
 	}
 
-	// 9. Graceful shutdown
+	// 8. Graceful shutdown
 	cancel()
 	gracefulShutdown(app, logger)
 	consumerWG.Wait()
 	eventConsumer.Close()
+	if err := chWriter.Close(); err != nil {
+		logger.Error().Err(err).Msg("clickhouse writer shutdown error")
+	}
 
 	logger.Info().Msg("shutdown complete")
 }

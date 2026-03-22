@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/Tanilytics/processing/internal/models"
 	"github.com/Tanilytics/processing/internal/pipeline"
@@ -12,6 +13,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/twmb/franz-go/pkg/kgo"
 )
 
 const (
@@ -23,7 +25,7 @@ func TestNewEventConsumerWithoutSASL(t *testing.T) {
 	logger := zerolog.Nop()
 	brokers := []string{testBroker}
 
-	consumer, err := NewEventConsumer(brokers, testGroupID, "", "", "", testPipeline(), &logger)
+	consumer, err := NewEventConsumer(brokers, testGroupID, "", "", "", testOptions(), testPipeline(), &logger)
 
 	require.NoError(t, err)
 	assert.NotNil(t, consumer)
@@ -36,7 +38,7 @@ func TestNewEventConsumerWithSASLSHA256(t *testing.T) {
 	logger := zerolog.Nop()
 	brokers := []string{testBroker}
 
-	consumer, err := NewEventConsumer(brokers, testGroupID, "user", "pass", "SCRAM-SHA-256", testPipeline(), &logger)
+	consumer, err := NewEventConsumer(brokers, testGroupID, "user", "pass", "SCRAM-SHA-256", testOptions(), testPipeline(), &logger)
 
 	require.NoError(t, err)
 	assert.NotNil(t, consumer)
@@ -47,7 +49,7 @@ func TestNewEventConsumerWithSASLSHA512(t *testing.T) {
 	logger := zerolog.Nop()
 	brokers := []string{testBroker}
 
-	consumer, err := NewEventConsumer(brokers, testGroupID, "user", "pass", "SCRAM-SHA-512", testPipeline(), &logger)
+	consumer, err := NewEventConsumer(brokers, testGroupID, "user", "pass", "SCRAM-SHA-512", testOptions(), testPipeline(), &logger)
 
 	require.NoError(t, err)
 	assert.NotNil(t, consumer)
@@ -58,7 +60,7 @@ func TestNewEventConsumerWithEmptyMechanismFallsBackToSHA256(t *testing.T) {
 	logger := zerolog.Nop()
 	brokers := []string{testBroker}
 
-	consumer, err := NewEventConsumer(brokers, testGroupID, "user", "pass", "", testPipeline(), &logger)
+	consumer, err := NewEventConsumer(brokers, testGroupID, "user", "pass", "", testOptions(), testPipeline(), &logger)
 
 	require.NoError(t, err)
 	assert.NotNil(t, consumer)
@@ -68,7 +70,7 @@ func TestNewEventConsumerWithUnknownMechanismFallsBackToSHA256(t *testing.T) {
 	logger := zerolog.Nop()
 	brokers := []string{testBroker}
 
-	consumer, err := NewEventConsumer(brokers, testGroupID, "user", "pass", "UNKNOWN-MECH", testPipeline(), &logger)
+	consumer, err := NewEventConsumer(brokers, testGroupID, "user", "pass", "UNKNOWN-MECH", testOptions(), testPipeline(), &logger)
 
 	require.NoError(t, err)
 	assert.NotNil(t, consumer)
@@ -78,7 +80,7 @@ func TestNewEventConsumerWithMultipleBrokers(t *testing.T) {
 	logger := zerolog.Nop()
 	brokers := []string{"broker1:9092", "broker2:9092", "broker3:9092"}
 
-	consumer, err := NewEventConsumer(brokers, testGroupID, "", "", "", testPipeline(), &logger)
+	consumer, err := NewEventConsumer(brokers, testGroupID, "", "", "", testOptions(), testPipeline(), &logger)
 
 	require.NoError(t, err)
 	assert.NotNil(t, consumer)
@@ -88,7 +90,7 @@ func TestEventConsumerClose(t *testing.T) {
 	logger := zerolog.Nop()
 	brokers := []string{testBroker}
 
-	consumer, err := NewEventConsumer(brokers, testGroupID, "", "", "", testPipeline(), &logger)
+	consumer, err := NewEventConsumer(brokers, testGroupID, "", "", "", testOptions(), testPipeline(), &logger)
 	require.NoError(t, err)
 
 	assert.NotPanics(t, func() {
@@ -194,7 +196,7 @@ func TestRunContextCancellation(t *testing.T) {
 	logger := zerolog.Nop()
 	brokers := []string{testBroker}
 
-	consumer, err := NewEventConsumer(brokers, testGroupID, "", "", "", testPipeline(), &logger)
+	consumer, err := NewEventConsumer(brokers, testGroupID, "", "", "", testOptions(), testPipeline(), &logger)
 	require.NoError(t, err)
 	defer consumer.Close()
 
@@ -203,6 +205,88 @@ func TestRunContextCancellation(t *testing.T) {
 
 	err = consumer.Run(ctx)
 	assert.ErrorIs(t, err, context.Canceled)
+}
+
+func TestNewEventConsumerAppliesCustomOptions(t *testing.T) {
+	logger := zerolog.Nop()
+	opts := Options{
+		Topic:                  "replay-events",
+		ResetOffset:            "start",
+		FetchMinBytes:          128 * 1024,
+		FetchMaxBytes:          8 * 1024 * 1024,
+		FetchMaxWait:           500 * time.Millisecond,
+		FetchMaxPartitionBytes: 2 * 1024 * 1024,
+		MaxConcurrentFetches:   4,
+	}
+
+	consumer, err := NewEventConsumer([]string{testBroker}, testGroupID, "", "", "", opts, testPipeline(), &logger)
+	require.NoError(t, err)
+	defer consumer.Close()
+
+	assert.Equal(t, int32(128*1024), consumer.client.OptValue(kgo.FetchMinBytes).(int32))
+	assert.Equal(t, int32(8*1024*1024), consumer.client.OptValue(kgo.FetchMaxBytes).(int32))
+	assert.Equal(t, 500*time.Millisecond, consumer.client.OptValue(kgo.FetchMaxWait).(time.Duration))
+	assert.Equal(t, int32(2*1024*1024), consumer.client.OptValue(kgo.FetchMaxPartitionBytes).(int32))
+	assert.Equal(t, 4, consumer.client.OptValue(kgo.MaxConcurrentFetches).(int))
+}
+
+func TestParseResetOffset(t *testing.T) {
+	start, err := parseResetOffset("start")
+	require.NoError(t, err)
+	assert.Equal(t, kgo.NewOffset().AtStart().String(), start.String())
+
+	end, err := parseResetOffset("end")
+	require.NoError(t, err)
+	assert.Equal(t, kgo.NewOffset().AtEnd().String(), end.String())
+}
+
+func TestNewEventConsumerRejectsInvalidResetOffset(t *testing.T) {
+	logger := zerolog.Nop()
+
+	consumer, err := NewEventConsumer(
+		[]string{testBroker},
+		testGroupID,
+		"",
+		"",
+		"",
+		invalidResetOptions(),
+		testPipeline(),
+		&logger,
+	)
+
+	require.Error(t, err)
+	assert.Nil(t, consumer)
+	assert.ErrorContains(t, err, "must be start or end")
+}
+
+func TestNewEventConsumerRejectsNonPositiveFetchMaxBytes(t *testing.T) {
+	logger := zerolog.Nop()
+	opts := testOptions()
+	opts.FetchMaxBytes = 0
+
+	consumer, err := NewEventConsumer([]string{testBroker}, testGroupID, "", "", "", opts, testPipeline(), &logger)
+
+	require.Error(t, err)
+	assert.Nil(t, consumer)
+	assert.ErrorContains(t, err, "fetch max bytes must be > 0")
+}
+
+func testOptions() Options {
+	return Options{
+		Topic:                  "raw-events",
+		ResetOffset:            "end",
+		FetchMinBytes:          64 * 1024,
+		FetchMaxBytes:          50 * 1024 * 1024,
+		FetchMaxWait:           250 * time.Millisecond,
+		FetchMaxPartitionBytes: 4 * 1024 * 1024,
+		MaxConcurrentFetches:   2,
+	}
+}
+
+func invalidResetOptions() Options {
+	opts := testOptions()
+	opts.ResetOffset = "middle"
+	return opts
 }
 
 func testPipeline() *pipeline.Pipeline {

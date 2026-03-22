@@ -21,5 +21,8 @@ run = "./bin/processor"
 [tasks.test]
 run = "go test ./..."
 
+[tasks.lint]
+run = "golangci-lint run"
+
 [tasks.clean]
 run = "rm -rf tmp bin"

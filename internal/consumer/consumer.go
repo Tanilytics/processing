@@ -3,6 +3,9 @@ package consumer
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"strings"
+	"time"
 
 	"github.com/Tanilytics/processing/internal/models"
 	"github.com/Tanilytics/processing/internal/pipeline"
@@ -11,21 +14,54 @@ import (
 	"github.com/twmb/franz-go/pkg/sasl/scram"
 )
 
+type Options struct {
+	Topic                  string
+	ResetOffset            string
+	FetchMinBytes          int32
+	FetchMaxBytes          int32
+	FetchMaxWait           time.Duration
+	FetchMaxPartitionBytes int32
+	MaxConcurrentFetches   int
+}
+
 type EventConsumer struct {
 	client   *kgo.Client
 	pipeline *pipeline.Pipeline
 	logger   *zerolog.Logger
 }
 
-func NewEventConsumer(brokers []string, groupID, saslUser, saslPassword, saslMechanism string, p *pipeline.Pipeline, logger *zerolog.Logger) (*EventConsumer, error) {
+func NewEventConsumer(brokers []string, groupID, saslUser, saslPassword, saslMechanism string, options Options, p *pipeline.Pipeline, logger *zerolog.Logger) (*EventConsumer, error) {
+	resetOffset, err := parseResetOffset(options.ResetOffset)
+	if err != nil {
+		return nil, err
+	}
+	if options.FetchMinBytes < 0 {
+		return nil, fmt.Errorf("fetch min bytes must be >= 0")
+	}
+	if options.FetchMaxBytes <= 0 {
+		return nil, fmt.Errorf("fetch max bytes must be > 0")
+	}
+	if options.FetchMaxWait < 0 {
+		return nil, fmt.Errorf("fetch max wait must be >= 0")
+	}
+	if options.FetchMaxPartitionBytes < 0 {
+		return nil, fmt.Errorf("fetch max partition bytes must be >= 0")
+	}
+	if options.MaxConcurrentFetches < 0 {
+		return nil, fmt.Errorf("max concurrent fetches must be >= 0")
+	}
+
 	opts := []kgo.Opt{
 		kgo.SeedBrokers(brokers...),
 		kgo.ConsumerGroup(groupID),
-		kgo.ConsumeTopics("raw-events"),
+		kgo.ConsumeTopics(options.Topic),
 		kgo.DisableAutoCommit(), // manual commit after processing
-		kgo.FetchMinBytes(1),
-		kgo.FetchMaxBytes(50 * 1024 * 1024),               // 50MB max fetch
-		kgo.ConsumeResetOffset(kgo.NewOffset().AtStart()), // start from beginning on new group
+		kgo.FetchMinBytes(options.FetchMinBytes),
+		kgo.FetchMaxBytes(options.FetchMaxBytes),
+		kgo.FetchMaxWait(options.FetchMaxWait),
+		kgo.FetchMaxPartitionBytes(options.FetchMaxPartitionBytes),
+		kgo.MaxConcurrentFetches(options.MaxConcurrentFetches),
+		kgo.ConsumeResetOffset(resetOffset),
 	}
 
 	if saslUser != "" {
@@ -48,6 +84,17 @@ func NewEventConsumer(brokers []string, groupID, saslUser, saslPassword, saslMec
 		return nil, err
 	}
 	return &EventConsumer{client: client, pipeline: p, logger: logger}, nil
+}
+
+func parseResetOffset(value string) (kgo.Offset, error) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "", "end", "latest":
+		return kgo.NewOffset().AtEnd(), nil
+	case "start", "earliest":
+		return kgo.NewOffset().AtStart(), nil
+	default:
+		return kgo.Offset{}, fmt.Errorf("invalid consumer reset offset %q: must be start or end", value)
+	}
 }
 
 func (c *EventConsumer) Run(ctx context.Context) error {
