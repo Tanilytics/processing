@@ -30,11 +30,6 @@ func main() {
 		Str("port", cfg.Port).
 		Strs("brokers", cfg.RedpandaBrokers).
 		Strs("clickhouse_addrs", cfg.ClickhouseAddrs).
-		Str("clickhouse_conn_open_strategy", cfg.ClickhouseConnOpenStrategy).
-		Int("clickhouse_max_open_conns", cfg.ClickhouseMaxOpenConns).
-		Int("clickhouse_max_idle_conns", cfg.ClickhouseMaxIdleConns).
-		Int("clickhouse_batch_size", cfg.ClickhouseBatchSize).
-		Dur("clickhouse_batch_timeout", cfg.ClickhouseBatchTimeout).
 		Str("redis_url", cfg.RedisURL).
 		Msg("starting processor service")
 
@@ -80,6 +75,7 @@ func main() {
 			FetchMaxBytes:          cfg.ConsumerFetchMaxBytes,
 			FetchMaxWait:           cfg.ConsumerFetchMaxWait,
 			FetchMaxPartitionBytes: cfg.ConsumerFetchMaxPartitionBytes,
+			BlockRebalanceOnPoll:   cfg.ConsumerBlockRebalanceOnPoll,
 			MaxConcurrentFetches:   cfg.ConsumerMaxConcurrentFetches,
 			BatchSize:              cfg.ClickhouseBatchSize,
 			BatchTimeout:           cfg.ClickhouseBatchTimeout,

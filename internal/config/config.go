@@ -26,6 +26,7 @@ type ProcessorConfig struct {
 	ConsumerFetchMaxBytes          int32
 	ConsumerFetchMaxWait           time.Duration
 	ConsumerFetchMaxPartitionBytes int32
+	ConsumerBlockRebalanceOnPoll   bool
 	ConsumerMaxConcurrentFetches   int
 	ClickhouseAddrs                []string
 	ClickhouseDatabase             string
@@ -56,6 +57,9 @@ func LoadProcessorConfig() ProcessorConfig {
 		ConsumerFetchMaxWait:  getEnvDuration("CONSUMER_FETCH_MAX_WAIT"),
 		ConsumerFetchMaxPartitionBytes: getEnvInt32(
 			"CONSUMER_FETCH_MAX_PARTITION_BYTES",
+		),
+		ConsumerBlockRebalanceOnPoll: getEnvBool(
+			"CONSUMER_BLOCK_REBALANCE_ON_POLL",
 		),
 		ConsumerMaxConcurrentFetches: getEnvInt("CONSUMER_MAX_CONCURRENT_FETCHES"),
 		ClickhouseAddrs:              getEnvCSV("CLICKHOUSE_ADDRS"),
@@ -117,6 +121,18 @@ func getEnvDuration(key string) time.Duration {
 	}
 
 	return d
+}
+
+func getEnvBool(key string) bool {
+	v := getEnv(key)
+
+	b, err := strconv.ParseBool(strings.TrimSpace(v))
+	if err != nil {
+		log.Printf(invalidEnvVarLogFormat, key, err)
+		os.Exit(1)
+	}
+
+	return b
 }
 
 func getEnvCSV(key string) []string {

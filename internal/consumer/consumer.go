@@ -3,6 +3,7 @@ package consumer
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -21,6 +22,7 @@ type Options struct {
 	FetchMaxBytes          int32
 	FetchMaxWait           time.Duration
 	FetchMaxPartitionBytes int32
+	BlockRebalanceOnPoll   bool
 	MaxConcurrentFetches   int
 	BatchSize              int
 	BatchTimeout           time.Duration
@@ -38,11 +40,12 @@ type SASLOptions struct {
 }
 
 type EventConsumer struct {
-	client       *kgo.Client
-	pipeline     *pipeline.Pipeline
-	logger       *zerolog.Logger
-	batchSize    int
-	batchTimeout time.Duration
+	client               *kgo.Client
+	pipeline             *pipeline.Pipeline
+	logger               *zerolog.Logger
+	batchSize            int
+	batchTimeout         time.Duration
+	blockRebalanceOnPoll bool
 }
 
 type consumerBatch struct {
@@ -93,6 +96,9 @@ func NewEventConsumer(brokers []string, connection ConnectionOptions, options Op
 		kgo.MaxConcurrentFetches(options.MaxConcurrentFetches),
 		kgo.ConsumeResetOffset(resetOffset),
 	}
+	if options.BlockRebalanceOnPoll {
+		opts = append(opts, kgo.BlockRebalanceOnPoll())
+	}
 
 	if connection.SASL.User != "" {
 		auth := scram.Auth{
@@ -114,11 +120,12 @@ func NewEventConsumer(brokers []string, connection ConnectionOptions, options Op
 		return nil, err
 	}
 	return &EventConsumer{
-		client:       client,
-		pipeline:     p,
-		logger:       logger,
-		batchSize:    options.BatchSize,
-		batchTimeout: options.BatchTimeout,
+		client:               client,
+		pipeline:             p,
+		logger:               logger,
+		batchSize:            options.BatchSize,
+		batchTimeout:         options.BatchTimeout,
+		blockRebalanceOnPoll: options.BlockRebalanceOnPoll,
 	}, nil
 }
 
@@ -134,12 +141,55 @@ func parseResetOffset(value string) (kgo.Offset, error) {
 }
 
 func (c *EventConsumer) Run(ctx context.Context) error {
+	if c.blockRebalanceOnPoll {
+		return c.runWithBlockedRebalances(ctx)
+	}
+
 	batch := consumerBatch{}
 	for {
 		if err := c.runOnce(ctx, &batch); err != nil {
 			return err
 		}
 	}
+}
+
+func (c *EventConsumer) runWithBlockedRebalances(ctx context.Context) error {
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := c.runBlockedOnce(ctx); err != nil {
+			return err
+		}
+	}
+}
+
+func (c *EventConsumer) runBlockedOnce(ctx context.Context) error {
+	pollCtx, cancel := context.WithTimeout(ctx, c.batchTimeout)
+	fetches := c.client.PollRecords(pollCtx, c.batchSize)
+	cancel()
+	defer c.client.AllowRebalance()
+
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	if isIgnorablePollError(fetches.Err()) && fetches.NumRecords() == 0 {
+		return nil
+	}
+
+	batch := consumerBatch{}
+	recordsFetched := c.collectPending(fetches, &batch)
+	if len(batch.pending) == 0 {
+		c.commitFetchedOffsets(ctx, recordsFetched)
+		return nil
+	}
+
+	if err := c.flushPending(ctx, batch.pending); err != nil {
+		c.logger.Error().Err(err).Int("batch_size", len(batch.pending)).Msg("pipeline processing failed")
+	}
+
+	return nil
 }
 
 func (c *EventConsumer) runOnce(ctx context.Context, batch *consumerBatch) error {
@@ -324,4 +374,8 @@ func (b *consumerBatch) shouldFlush(batchSize int, batchTimeout time.Duration, n
 
 func (c *EventConsumer) Close() {
 	c.client.Close()
+}
+
+func isIgnorablePollError(err error) bool {
+	return errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled)
 }

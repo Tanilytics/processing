@@ -267,6 +267,7 @@ func TestNewEventConsumerAppliesCustomOptions(t *testing.T) {
 		FetchMaxBytes:          8 * 1024 * 1024,
 		FetchMaxWait:           500 * time.Millisecond,
 		FetchMaxPartitionBytes: 2 * 1024 * 1024,
+		BlockRebalanceOnPoll:   true,
 		MaxConcurrentFetches:   4,
 		BatchSize:              100,
 		BatchTimeout:           2 * time.Second,
@@ -295,8 +296,14 @@ func TestNewEventConsumerAppliesCustomOptions(t *testing.T) {
 	maxConcurrentFetches, ok := consumer.client.OptValue(kgo.MaxConcurrentFetches).(int)
 	require.True(t, ok)
 	assert.Equal(t, 4, maxConcurrentFetches)
+
+	blockRebalanceOnPoll, ok := consumer.client.OptValue(kgo.BlockRebalanceOnPoll).(bool)
+	require.True(t, ok)
+	assert.True(t, blockRebalanceOnPoll)
+
 	assert.Equal(t, 100, consumer.batchSize)
 	assert.Equal(t, 2*time.Second, consumer.batchTimeout)
+	assert.True(t, consumer.blockRebalanceOnPoll)
 }
 
 func TestParseResetOffset(t *testing.T) {
