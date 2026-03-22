@@ -20,11 +20,13 @@ func TestLoadProcessorConfig(t *testing.T) {
 	t.Setenv("CONSUMER_FETCH_MAX_BYTES", "52428800")
 	t.Setenv("CONSUMER_FETCH_MAX_WAIT", "250ms")
 	t.Setenv("CONSUMER_FETCH_MAX_PARTITION_BYTES", "4194304")
+	t.Setenv("CONSUMER_BLOCK_REBALANCE_ON_POLL", "false")
 	t.Setenv("CONSUMER_MAX_CONCURRENT_FETCHES", "2")
 	t.Setenv("CLICKHOUSE_ADDRS", "clickhouse-1:9000, clickhouse-2:9000")
 	t.Setenv("CLICKHOUSE_DATABASE", "default")
 	t.Setenv("CLICKHOUSE_USERNAME", "default")
 	t.Setenv("CLICKHOUSE_PASSWORD", "change-me")
+	t.Setenv("CLICKHOUSE_DIAL_TIMEOUT", "10s")
 	t.Setenv("CLICKHOUSE_MAX_OPEN_CONNS", "10")
 	t.Setenv("CLICKHOUSE_MAX_IDLE_CONNS", "5")
 	t.Setenv("CLICKHOUSE_CONN_OPEN_STRATEGY", "round_robin")
@@ -51,6 +53,7 @@ func TestLoadProcessorConfig(t *testing.T) {
 	assert.Equal(t, 10, cfg.ClickhouseMaxOpenConns)
 	assert.Equal(t, 5, cfg.ClickhouseMaxIdleConns)
 	assert.Equal(t, "round_robin", cfg.ClickhouseConnOpenStrategy)
+	assert.Equal(t, 10*time.Second, cfg.ClickhouseDialTimeout)
 	assert.Equal(t, 10000, cfg.ClickhouseBatchSize)
 	assert.Equal(t, 5*time.Second, cfg.ClickhouseBatchTimeout)
 }
@@ -86,4 +89,5 @@ func TestLoadProcessorConfigWithBlockRebalanceOnPoll(t *testing.T) {
 	cfg := LoadProcessorConfig()
 
 	assert.True(t, cfg.ConsumerBlockRebalanceOnPoll)
+	assert.Equal(t, 5*time.Second, cfg.ClickhouseDialTimeout)
 }

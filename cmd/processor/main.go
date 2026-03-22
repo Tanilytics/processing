@@ -47,6 +47,7 @@ func main() {
 		Database:         cfg.ClickhouseDatabase,
 		Username:         cfg.ClickhouseUsername,
 		Password:         cfg.ClickhousePassword,
+		DialTimeout:      cfg.ClickhouseDialTimeout,
 		MaxOpenConns:     cfg.ClickhouseMaxOpenConns,
 		MaxIdleConns:     cfg.ClickhouseMaxIdleConns,
 		ConnOpenStrategy: cfg.ClickhouseConnOpenStrategy,

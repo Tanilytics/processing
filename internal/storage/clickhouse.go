@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/Tanilytics/processing/internal/models"
@@ -14,6 +15,7 @@ type Options struct {
 	Database         string
 	Username         string
 	Password         string
+	DialTimeout      time.Duration
 	MaxOpenConns     int
 	MaxIdleConns     int
 	ConnOpenStrategy string
@@ -51,6 +53,7 @@ func NewClickHouseWriter(options Options) (*ClickHouseWriter, error) {
 		Compression: &clickhouse.Compression{
 			Method: clickhouse.CompressionLZ4,
 		},
+		DialTimeout:      options.DialTimeout,
 		MaxOpenConns:     options.MaxOpenConns,
 		MaxIdleConns:     options.MaxIdleConns,
 		ConnOpenStrategy: strategy,

@@ -8,7 +8,9 @@ import (
 	"time"
 )
 
-const invalidEnvVarLogFormat = "invalid value for environment variable %s: %v"
+const (
+	invalidEnvVarLogFormat = "invalid value for environment variable %s: %v"
+)
 
 type ProcessorConfig struct {
 	Port                 string
@@ -32,6 +34,7 @@ type ProcessorConfig struct {
 	ClickhouseDatabase             string
 	ClickhouseUsername             string
 	ClickhousePassword             string
+	ClickhouseDialTimeout          time.Duration
 	ClickhouseBatchSize            int
 	ClickhouseBatchTimeout         time.Duration
 	ClickhouseMaxOpenConns         int
@@ -66,6 +69,7 @@ func LoadProcessorConfig() ProcessorConfig {
 		ClickhouseDatabase:           getEnv("CLICKHOUSE_DATABASE"),
 		ClickhouseUsername:           getEnv("CLICKHOUSE_USERNAME"),
 		ClickhousePassword:           getEnv("CLICKHOUSE_PASSWORD"),
+		ClickhouseDialTimeout:        getEnvDuration("CLICKHOUSE_DIAL_TIMEOUT"),
 		ClickhouseBatchSize:          getEnvInt("CH_BATCH_SIZE"),
 		ClickhouseBatchTimeout:       getEnvDuration("CH_BATCH_TIMEOUT"),
 		ClickhouseMaxOpenConns:       getEnvInt("CLICKHOUSE_MAX_OPEN_CONNS"),
