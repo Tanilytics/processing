@@ -16,6 +16,7 @@ import (
 	"github.com/Tanilytics/processing/internal/pipeline"
 	"github.com/Tanilytics/processing/internal/processors"
 	"github.com/Tanilytics/processing/internal/server"
+	"github.com/Tanilytics/processing/internal/storage"
 	"github.com/rs/zerolog"
 )
 
@@ -28,6 +29,7 @@ func main() {
 	logger.Info().
 		Str("port", cfg.Port).
 		Strs("brokers", cfg.RedpandaBrokers).
+		Str("clickhouse_addr", cfg.ClickhouseAddr).
 		Str("redis_url", cfg.RedisURL).
 		Msg("starting processor service")
 
@@ -46,9 +48,16 @@ func main() {
 	app := server.NewServer(cfg.Port)
 
 	// 5. Initialize event consumer
-	anonymizer := processors.NewAnonymizer(cfg.IPHashSalt)
+	anonymizer := processors.NewAnonymizer(cfg.AnonymizationSalt)
 	uaParser := processors.NewUserAgentParser()
-	processorPipeline := pipeline.NewPipeline(anonymizer, uaParser, logger)
+	chWriter, err := storage.NewClickHouseWriter(cfg.ClickhouseAddr)
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to initialize clickhouse writer")
+		return
+	}
+	defer chWriter.Close() // nolint: errcheck
+
+	processorPipeline := pipeline.NewPipeline(anonymizer, uaParser, chWriter, logger)
 
 	eventConsumer, err := consumer.NewEventConsumer(
 		cfg.RedpandaBrokers,
@@ -97,8 +106,8 @@ func main() {
 	// 9. Graceful shutdown
 	cancel()
 	gracefulShutdown(app, logger)
-	eventConsumer.Close()
 	consumerWG.Wait()
+	eventConsumer.Close()
 
 	logger.Info().Msg("shutdown complete")
 }

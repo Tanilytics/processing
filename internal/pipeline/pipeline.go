@@ -2,10 +2,12 @@ package pipeline
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/Tanilytics/processing/internal/models"
 	"github.com/Tanilytics/processing/internal/processors"
+	"github.com/Tanilytics/processing/internal/storage"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 )
@@ -13,17 +15,20 @@ import (
 type Pipeline struct {
 	anonymizer *processors.Anonymizer
 	uaParser   *processors.UserAgentParser
+	chWriter   *storage.ClickHouseWriter
 	logger     *zerolog.Logger
 }
 
 func NewPipeline(
 	anonymizer *processors.Anonymizer,
 	uaParser *processors.UserAgentParser,
+	chWriter *storage.ClickHouseWriter,
 	logger *zerolog.Logger,
 ) *Pipeline {
 	return &Pipeline{
 		anonymizer: anonymizer,
 		uaParser:   uaParser,
+		chWriter:   chWriter,
 		logger:     logger,
 	}
 }
@@ -46,8 +51,8 @@ func (p *Pipeline) Process(ctx context.Context, events []*models.InternalEvent) 
 	}
 
 	// Step 4: Batch write to ClickHouse
-	if p.logger != nil {
-		p.logger.Debug().Int("processed_events", len(processed)).Msg("processed event batch")
+	if err := p.chWriter.WriteBatch(ctx, processed); err != nil {
+		return fmt.Errorf("clickhouse write: %w", err)
 	}
 
 	return nil
