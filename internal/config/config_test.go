@@ -7,14 +7,20 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+const (
+	testConsumerGroup    = "event-processor"
+	testConsumerTopic    = "raw-events"
+	testPlaceholderValue = "change-me"
+)
+
 func TestLoadProcessorConfig(t *testing.T) {
 	t.Setenv("PROCESSING_PORT", ":3000")
 	t.Setenv("REDPANDA_BROKERS", "broker-1:9092,broker-2:9092")
 	t.Setenv("REDPANDA_SASL_USER", "superuser")
 	t.Setenv("REDPANDA_SASL_PASSWORD", "secretpassword")
 	t.Setenv("REDPANDA_SASL_MECHANISM", "SCRAM-SHA-256")
-	t.Setenv("CONSUMER_GROUP", "event-processor")
-	t.Setenv("CONSUMER_TOPIC", "raw-events")
+	t.Setenv("CONSUMER_GROUP", testConsumerGroup)
+	t.Setenv("CONSUMER_TOPIC", testConsumerTopic)
 	t.Setenv("CONSUMER_RESET_OFFSET", "end")
 	t.Setenv("CONSUMER_FETCH_MIN_BYTES", "65536")
 	t.Setenv("CONSUMER_FETCH_MAX_BYTES", "52428800")
@@ -25,7 +31,7 @@ func TestLoadProcessorConfig(t *testing.T) {
 	t.Setenv("CLICKHOUSE_ADDRS", "clickhouse-1:9000, clickhouse-2:9000")
 	t.Setenv("CLICKHOUSE_DATABASE", "default")
 	t.Setenv("CLICKHOUSE_USERNAME", "default")
-	t.Setenv("CLICKHOUSE_PASSWORD", "change-me")
+	t.Setenv("CLICKHOUSE_PASSWORD", testPlaceholderValue)
 	t.Setenv("CLICKHOUSE_DIAL_TIMEOUT", "10s")
 	t.Setenv("CLICKHOUSE_MAX_OPEN_CONNS", "10")
 	t.Setenv("CLICKHOUSE_MAX_IDLE_CONNS", "5")
@@ -33,15 +39,15 @@ func TestLoadProcessorConfig(t *testing.T) {
 	t.Setenv("CH_BATCH_SIZE", "10000")
 	t.Setenv("CH_BATCH_TIMEOUT", "5s")
 	t.Setenv("REDIS_URL", "redis://localhost:6379")
-	t.Setenv("ANONYMIZATION_SALT", "change-me")
+	t.Setenv("ANONYMIZATION_SALT", testPlaceholderValue)
 	t.Setenv("LOG_LEVEL", "info")
 
 	cfg := LoadProcessorConfig()
 
 	assert.Equal(t, ":3000", cfg.Port)
 	assert.Equal(t, []string{"broker-1:9092", "broker-2:9092"}, cfg.RedpandaBrokers)
-	assert.Equal(t, "event-processor", cfg.ConsumerGroup)
-	assert.Equal(t, "raw-events", cfg.ConsumerTopic)
+	assert.Equal(t, testConsumerGroup, cfg.ConsumerGroup)
+	assert.Equal(t, testConsumerTopic, cfg.ConsumerTopic)
 	assert.Equal(t, "end", cfg.ConsumerResetOffset)
 	assert.Equal(t, int32(65536), cfg.ConsumerFetchMinBytes)
 	assert.Equal(t, int32(52428800), cfg.ConsumerFetchMaxBytes)
@@ -64,8 +70,8 @@ func TestLoadProcessorConfigWithBlockRebalanceOnPoll(t *testing.T) {
 	t.Setenv("REDPANDA_SASL_USER", "superuser")
 	t.Setenv("REDPANDA_SASL_PASSWORD", "secretpassword")
 	t.Setenv("REDPANDA_SASL_MECHANISM", "SCRAM-SHA-256")
-	t.Setenv("CONSUMER_GROUP", "event-processor")
-	t.Setenv("CONSUMER_TOPIC", "raw-events")
+	t.Setenv("CONSUMER_GROUP", testConsumerGroup)
+	t.Setenv("CONSUMER_TOPIC", testConsumerTopic)
 	t.Setenv("CONSUMER_RESET_OFFSET", "end")
 	t.Setenv("CONSUMER_FETCH_MIN_BYTES", "65536")
 	t.Setenv("CONSUMER_FETCH_MAX_BYTES", "52428800")
@@ -76,14 +82,14 @@ func TestLoadProcessorConfigWithBlockRebalanceOnPoll(t *testing.T) {
 	t.Setenv("CLICKHOUSE_ADDRS", "clickhouse-1:9000, clickhouse-2:9000")
 	t.Setenv("CLICKHOUSE_DATABASE", "default")
 	t.Setenv("CLICKHOUSE_USERNAME", "default")
-	t.Setenv("CLICKHOUSE_PASSWORD", "change-me")
+	t.Setenv("CLICKHOUSE_PASSWORD", testPlaceholderValue)
 	t.Setenv("CLICKHOUSE_MAX_OPEN_CONNS", "10")
 	t.Setenv("CLICKHOUSE_MAX_IDLE_CONNS", "5")
 	t.Setenv("CLICKHOUSE_CONN_OPEN_STRATEGY", "round_robin")
 	t.Setenv("CH_BATCH_SIZE", "10000")
 	t.Setenv("CH_BATCH_TIMEOUT", "5s")
 	t.Setenv("REDIS_URL", "redis://localhost:6379")
-	t.Setenv("ANONYMIZATION_SALT", "change-me")
+	t.Setenv("ANONYMIZATION_SALT", testPlaceholderValue)
 	t.Setenv("LOG_LEVEL", "info")
 
 	cfg := LoadProcessorConfig()
