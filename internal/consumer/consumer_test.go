@@ -217,6 +217,8 @@ func TestNewEventConsumerAppliesCustomOptions(t *testing.T) {
 		FetchMaxWait:           500 * time.Millisecond,
 		FetchMaxPartitionBytes: 2 * 1024 * 1024,
 		MaxConcurrentFetches:   4,
+		BatchSize:              100,
+		BatchTimeout:           2 * time.Second,
 	}
 
 	consumer, err := NewEventConsumer([]string{testBroker}, testGroupID, "", "", "", opts, testPipeline(), &logger)
@@ -228,6 +230,8 @@ func TestNewEventConsumerAppliesCustomOptions(t *testing.T) {
 	assert.Equal(t, 500*time.Millisecond, consumer.client.OptValue(kgo.FetchMaxWait).(time.Duration))
 	assert.Equal(t, int32(2*1024*1024), consumer.client.OptValue(kgo.FetchMaxPartitionBytes).(int32))
 	assert.Equal(t, 4, consumer.client.OptValue(kgo.MaxConcurrentFetches).(int))
+	assert.Equal(t, 100, consumer.batchSize)
+	assert.Equal(t, 2*time.Second, consumer.batchTimeout)
 }
 
 func TestParseResetOffset(t *testing.T) {
@@ -271,6 +275,39 @@ func TestNewEventConsumerRejectsNonPositiveFetchMaxBytes(t *testing.T) {
 	assert.ErrorContains(t, err, "fetch max bytes must be > 0")
 }
 
+func TestNewEventConsumerRejectsNonPositiveBatchSize(t *testing.T) {
+	logger := zerolog.Nop()
+	opts := testOptions()
+	opts.BatchSize = 0
+
+	consumer, err := NewEventConsumer([]string{testBroker}, testGroupID, "", "", "", opts, testPipeline(), &logger)
+
+	require.Error(t, err)
+	assert.Nil(t, consumer)
+	assert.ErrorContains(t, err, "batch size must be > 0")
+}
+
+func TestNewEventConsumerRejectsNonPositiveBatchTimeout(t *testing.T) {
+	logger := zerolog.Nop()
+	opts := testOptions()
+	opts.BatchTimeout = 0
+
+	consumer, err := NewEventConsumer([]string{testBroker}, testGroupID, "", "", "", opts, testPipeline(), &logger)
+
+	require.Error(t, err)
+	assert.Nil(t, consumer)
+	assert.ErrorContains(t, err, "batch timeout must be > 0")
+}
+
+func TestShouldFlushBatch(t *testing.T) {
+	now := time.Now()
+
+	assert.False(t, shouldFlushBatch(0, time.Time{}, 100, time.Second, now))
+	assert.False(t, shouldFlushBatch(10, now, 100, time.Second, now.Add(500*time.Millisecond)))
+	assert.True(t, shouldFlushBatch(100, now, 100, time.Second, now))
+	assert.True(t, shouldFlushBatch(10, now, 100, time.Second, now.Add(time.Second)))
+}
+
 func testOptions() Options {
 	return Options{
 		Topic:                  "raw-events",
@@ -280,6 +317,8 @@ func testOptions() Options {
 		FetchMaxWait:           250 * time.Millisecond,
 		FetchMaxPartitionBytes: 4 * 1024 * 1024,
 		MaxConcurrentFetches:   2,
+		BatchSize:              1000,
+		BatchTimeout:           time.Second,
 	}
 }
 
@@ -290,7 +329,15 @@ func invalidResetOptions() Options {
 }
 
 func testPipeline() *pipeline.Pipeline {
-	writer, err := storage.NewClickHouseWriter("some-addr", "default", "default", "test-password")
+	writer, err := storage.NewClickHouseWriter(storage.Options{
+		Addrs:            []string{"some-addr"},
+		Database:         "default",
+		Username:         "default",
+		Password:         "test-password",
+		MaxOpenConns:     10,
+		MaxIdleConns:     5,
+		ConnOpenStrategy: "in_order",
+	})
 	if err != nil {
 		panic(err)
 	}

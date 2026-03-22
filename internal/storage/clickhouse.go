@@ -3,22 +3,47 @@ package storage
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/Tanilytics/processing/internal/models"
 )
 
+type Options struct {
+	Addrs            []string
+	Database         string
+	Username         string
+	Password         string
+	MaxOpenConns     int
+	MaxIdleConns     int
+	ConnOpenStrategy string
+}
+
 type ClickHouseWriter struct {
 	conn clickhouse.Conn
 }
 
-func NewClickHouseWriter(addr, database, username, password string) (*ClickHouseWriter, error) {
+func NewClickHouseWriter(options Options) (*ClickHouseWriter, error) {
+	strategy, err := parseConnOpenStrategy(options.ConnOpenStrategy)
+	if err != nil {
+		return nil, err
+	}
+	if len(options.Addrs) == 0 {
+		return nil, fmt.Errorf("clickhouse addrs must not be empty")
+	}
+	if options.MaxOpenConns <= 0 {
+		return nil, fmt.Errorf("clickhouse max open conns must be > 0")
+	}
+	if options.MaxIdleConns < 0 {
+		return nil, fmt.Errorf("clickhouse max idle conns must be >= 0")
+	}
+
 	conn, err := clickhouse.Open(&clickhouse.Options{
-		Addr: []string{addr},
+		Addr: options.Addrs,
 		Auth: clickhouse.Auth{
-			Database: database,
-			Username: username,
-			Password: password,
+			Database: options.Database,
+			Username: options.Username,
+			Password: options.Password,
 		},
 		Settings: clickhouse.Settings{
 			"max_execution_time": 60,
@@ -26,13 +51,27 @@ func NewClickHouseWriter(addr, database, username, password string) (*ClickHouse
 		Compression: &clickhouse.Compression{
 			Method: clickhouse.CompressionLZ4,
 		},
-		MaxOpenConns: 10,
-		MaxIdleConns: 5,
+		MaxOpenConns:     options.MaxOpenConns,
+		MaxIdleConns:     options.MaxIdleConns,
+		ConnOpenStrategy: strategy,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("clickhouse open: %w", err)
 	}
 	return &ClickHouseWriter{conn: conn}, nil
+}
+
+func parseConnOpenStrategy(value string) (clickhouse.ConnOpenStrategy, error) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "in_order":
+		return clickhouse.ConnOpenInOrder, nil
+	case "round_robin":
+		return clickhouse.ConnOpenRoundRobin, nil
+	case "random":
+		return clickhouse.ConnOpenRandom, nil
+	default:
+		return 0, fmt.Errorf("invalid clickhouse conn open strategy %q: must be in_order, round_robin, or random", value)
+	}
 }
 
 func (w *ClickHouseWriter) WriteBatch(ctx context.Context, events []*models.ProcessedEvent) error {

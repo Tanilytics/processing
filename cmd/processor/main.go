@@ -29,7 +29,12 @@ func main() {
 	logger.Info().
 		Str("port", cfg.Port).
 		Strs("brokers", cfg.RedpandaBrokers).
-		Str("clickhouse_addr", cfg.ClickhouseAddr).
+		Strs("clickhouse_addrs", cfg.ClickhouseAddrs).
+		Str("clickhouse_conn_open_strategy", cfg.ClickhouseConnOpenStrategy).
+		Int("clickhouse_max_open_conns", cfg.ClickhouseMaxOpenConns).
+		Int("clickhouse_max_idle_conns", cfg.ClickhouseMaxIdleConns).
+		Int("clickhouse_batch_size", cfg.ClickhouseBatchSize).
+		Dur("clickhouse_batch_timeout", cfg.ClickhouseBatchTimeout).
 		Str("redis_url", cfg.RedisURL).
 		Msg("starting processor service")
 
@@ -42,12 +47,15 @@ func main() {
 	// 4. Initialize event consumer
 	anonymizer := processors.NewAnonymizer(cfg.AnonymizationSalt)
 	uaParser := processors.NewUserAgentParser()
-	chWriter, err := storage.NewClickHouseWriter(
-		cfg.ClickhouseAddr,
-		cfg.ClickhouseDatabase,
-		cfg.ClickhouseUsername,
-		cfg.ClickhousePassword,
-	)
+	chWriter, err := storage.NewClickHouseWriter(storage.Options{
+		Addrs:            cfg.ClickhouseAddrs,
+		Database:         cfg.ClickhouseDatabase,
+		Username:         cfg.ClickhouseUsername,
+		Password:         cfg.ClickhousePassword,
+		MaxOpenConns:     cfg.ClickhouseMaxOpenConns,
+		MaxIdleConns:     cfg.ClickhouseMaxIdleConns,
+		ConnOpenStrategy: cfg.ClickhouseConnOpenStrategy,
+	})
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to initialize clickhouse writer")
 		return
@@ -69,6 +77,8 @@ func main() {
 			FetchMaxWait:           cfg.ConsumerFetchMaxWait,
 			FetchMaxPartitionBytes: cfg.ConsumerFetchMaxPartitionBytes,
 			MaxConcurrentFetches:   cfg.ConsumerMaxConcurrentFetches,
+			BatchSize:              cfg.ClickhouseBatchSize,
+			BatchTimeout:           cfg.ClickhouseBatchTimeout,
 		},
 		processorPipeline,
 		logger,

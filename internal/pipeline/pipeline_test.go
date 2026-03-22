@@ -38,7 +38,15 @@ func TestParseUUIDDerivesDeterministicUUID(t *testing.T) {
 }
 
 func TestProcessEventDerivesUUIDAndClampsScreenWidth(t *testing.T) {
-	writer, err := storage.NewClickHouseWriter("some-addr", "default", "default", "test-password")
+	writer, err := storage.NewClickHouseWriter(storage.Options{
+		Addrs:            []string{"some-addr"},
+		Database:         "default",
+		Username:         "default",
+		Password:         "test-password",
+		MaxOpenConns:     10,
+		MaxIdleConns:     5,
+		ConnOpenStrategy: "in_order",
+	})
 	if err != nil {
 		t.Fatalf("failed to create writer: %v", err)
 	}

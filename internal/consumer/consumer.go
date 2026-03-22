@@ -22,15 +22,23 @@ type Options struct {
 	FetchMaxWait           time.Duration
 	FetchMaxPartitionBytes int32
 	MaxConcurrentFetches   int
+	BatchSize              int
+	BatchTimeout           time.Duration
 }
 
 type EventConsumer struct {
-	client   *kgo.Client
-	pipeline *pipeline.Pipeline
-	logger   *zerolog.Logger
+	client       *kgo.Client
+	pipeline     *pipeline.Pipeline
+	logger       *zerolog.Logger
+	batchSize    int
+	batchTimeout time.Duration
 }
 
 func NewEventConsumer(brokers []string, groupID, saslUser, saslPassword, saslMechanism string, options Options, p *pipeline.Pipeline, logger *zerolog.Logger) (*EventConsumer, error) {
+	if strings.TrimSpace(options.Topic) == "" {
+		return nil, fmt.Errorf("topic must not be empty")
+	}
+
 	resetOffset, err := parseResetOffset(options.ResetOffset)
 	if err != nil {
 		return nil, err
@@ -49,6 +57,12 @@ func NewEventConsumer(brokers []string, groupID, saslUser, saslPassword, saslMec
 	}
 	if options.MaxConcurrentFetches < 0 {
 		return nil, fmt.Errorf("max concurrent fetches must be >= 0")
+	}
+	if options.BatchSize <= 0 {
+		return nil, fmt.Errorf("batch size must be > 0")
+	}
+	if options.BatchTimeout <= 0 {
+		return nil, fmt.Errorf("batch timeout must be > 0")
 	}
 
 	opts := []kgo.Opt{
@@ -83,12 +97,18 @@ func NewEventConsumer(brokers []string, groupID, saslUser, saslPassword, saslMec
 	if err != nil {
 		return nil, err
 	}
-	return &EventConsumer{client: client, pipeline: p, logger: logger}, nil
+	return &EventConsumer{
+		client:       client,
+		pipeline:     p,
+		logger:       logger,
+		batchSize:    options.BatchSize,
+		batchTimeout: options.BatchTimeout,
+	}, nil
 }
 
 func parseResetOffset(value string) (kgo.Offset, error) {
 	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "", "end", "latest":
+	case "end", "latest":
 		return kgo.NewOffset().AtEnd(), nil
 	case "start", "earliest":
 		return kgo.NewOffset().AtStart(), nil
@@ -98,10 +118,53 @@ func parseResetOffset(value string) (kgo.Offset, error) {
 }
 
 func (c *EventConsumer) Run(ctx context.Context) error {
+	var (
+		pending        []*models.InternalEvent
+		batchStartedAt time.Time
+	)
+
 	for {
-		fetches := c.client.PollFetches(ctx)
 		if ctx.Err() != nil {
+			if len(pending) == 0 {
+				return ctx.Err()
+			}
+
+			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			if err := c.flushPending(shutdownCtx, pending); err != nil {
+				shutdownCancel()
+				return fmt.Errorf("flush pending events on shutdown: %w", err)
+			}
+
+			shutdownCancel()
 			return ctx.Err()
+		}
+
+		if shouldFlushBatch(len(pending), batchStartedAt, c.batchSize, c.batchTimeout, time.Now()) {
+			if err := c.flushPending(ctx, pending); err != nil {
+				c.logger.Error().Err(err).Int("batch_size", len(pending)).Msg("pipeline processing failed")
+				continue
+			}
+			pending = nil
+			batchStartedAt = time.Time{}
+			continue
+		}
+
+		pollCtx := ctx
+		cancel := func() {}
+		if len(pending) > 0 {
+			remaining := time.Until(batchStartedAt.Add(c.batchTimeout))
+			if remaining <= 0 {
+				continue
+			}
+
+			pollCtx, cancel = context.WithTimeout(ctx, remaining)
+		}
+
+		fetches := c.client.PollFetches(pollCtx)
+		pollErr := pollCtx.Err()
+		cancel()
+		if ctx.Err() != nil {
+			continue
 		}
 		if errs := fetches.Errors(); len(errs) > 0 {
 			for _, e := range errs {
@@ -113,8 +176,11 @@ func (c *EventConsumer) Run(ctx context.Context) error {
 			}
 		}
 
-		var events []*models.InternalEvent
+		batchWasEmpty := len(pending) == 0
+		recordsFetched := 0
 		fetches.EachRecord(func(record *kgo.Record) {
+			recordsFetched++
+
 			var event models.InternalEvent
 			if err := json.Unmarshal(record.Value, &event); err != nil {
 				c.logger.Error().
@@ -124,25 +190,66 @@ func (c *EventConsumer) Run(ctx context.Context) error {
 					Msg("unmarshal event")
 				return // skip malformed records (will be DLQ'd when I feel like doing it)
 			}
-			events = append(events, &event)
+			pending = append(pending, &event)
 		})
 
-		if len(events) > 0 {
-			if err := c.pipeline.Process(ctx, events); err != nil {
-				c.logger.Error().
-					Err(err).
-					Int("batch_size", len(events)).
-					Msg("pipeline processing failed")
-				// Don't commit offsets, will retry on next poll
-				continue
-			}
+		if batchWasEmpty && len(pending) > 0 {
+			batchStartedAt = time.Now()
 		}
 
-		// Commit offsets after successful processing
-		if err := c.client.CommitUncommittedOffsets(ctx); err != nil {
-			c.logger.Error().Err(err).Msg("offset commit failed")
+		if len(pending) == 0 {
+			if recordsFetched > 0 {
+				if err := c.client.CommitUncommittedOffsets(ctx); err != nil {
+					c.logger.Error().Err(err).Msg("offset commit failed")
+				}
+			}
+
+			continue
+		}
+
+		if shouldFlushBatch(len(pending), batchStartedAt, c.batchSize, c.batchTimeout, time.Now()) || pollErr == context.DeadlineExceeded {
+			if err := c.flushPending(ctx, pending); err != nil {
+				c.logger.Error().
+					Err(err).
+					Int("batch_size", len(pending)).
+					Msg("pipeline processing failed")
+				continue
+			}
+
+			pending = nil
+			batchStartedAt = time.Time{}
 		}
 	}
+}
+
+func (c *EventConsumer) flushPending(ctx context.Context, events []*models.InternalEvent) error {
+	if len(events) == 0 {
+		return nil
+	}
+
+	if err := c.pipeline.Process(ctx, events); err != nil {
+		return err
+	}
+
+	if err := c.client.CommitUncommittedOffsets(ctx); err != nil {
+		return fmt.Errorf("offset commit failed: %w", err)
+	}
+
+	return nil
+}
+
+func shouldFlushBatch(batchLen int, batchStartedAt time.Time, batchSize int, batchTimeout time.Duration, now time.Time) bool {
+	if batchLen == 0 {
+		return false
+	}
+	if batchLen >= batchSize {
+		return true
+	}
+	if batchStartedAt.IsZero() {
+		return false
+	}
+
+	return now.Sub(batchStartedAt) >= batchTimeout
 }
 
 func (c *EventConsumer) Close() {

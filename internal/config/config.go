@@ -25,12 +25,15 @@ type ProcessorConfig struct {
 	ConsumerFetchMaxWait           time.Duration
 	ConsumerFetchMaxPartitionBytes int32
 	ConsumerMaxConcurrentFetches   int
-	ClickhouseAddr                 string
+	ClickhouseAddrs                []string
 	ClickhouseDatabase             string
 	ClickhouseUsername             string
 	ClickhousePassword             string
 	ClickhouseBatchSize            int
 	ClickhouseBatchTimeout         time.Duration
+	ClickhouseMaxOpenConns         int
+	ClickhouseMaxIdleConns         int
+	ClickhouseConnOpenStrategy     string
 	RedisURL                       string
 	AnonymizationSalt              string
 	LogLevel                       string
@@ -53,10 +56,15 @@ func LoadProcessorConfig() ProcessorConfig {
 			"CONSUMER_FETCH_MAX_PARTITION_BYTES",
 		),
 		ConsumerMaxConcurrentFetches: getEnvInt("CONSUMER_MAX_CONCURRENT_FETCHES"),
-		ClickhouseAddr:               getEnv("CLICKHOUSE_ADDR"),
+		ClickhouseAddrs:              getEnvCSV("CLICKHOUSE_ADDRS"),
 		ClickhouseDatabase:           getEnv("CLICKHOUSE_DATABASE"),
 		ClickhouseUsername:           getEnv("CLICKHOUSE_USERNAME"),
 		ClickhousePassword:           getEnv("CLICKHOUSE_PASSWORD"),
+		ClickhouseBatchSize:          getEnvInt("CH_BATCH_SIZE"),
+		ClickhouseBatchTimeout:       getEnvDuration("CH_BATCH_TIMEOUT"),
+		ClickhouseMaxOpenConns:       getEnvInt("CLICKHOUSE_MAX_OPEN_CONNS"),
+		ClickhouseMaxIdleConns:       getEnvInt("CLICKHOUSE_MAX_IDLE_CONNS"),
+		ClickhouseConnOpenStrategy:   getEnv("CLICKHOUSE_CONN_OPEN_STRATEGY"),
 		RedisURL:                     getEnv("REDIS_URL"),
 		LogLevel:                     getEnv("LOG_LEVEL"),
 		AnonymizationSalt:            getEnv("ANONYMIZATION_SALT"),
@@ -107,4 +115,24 @@ func getEnvDuration(key string) time.Duration {
 	}
 
 	return d
+}
+
+func getEnvCSV(key string) []string {
+	v := getEnv(key)
+	parts := strings.Split(v, ",")
+	values := make([]string, 0, len(parts))
+
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed != "" {
+			values = append(values, trimmed)
+		}
+	}
+
+	if len(values) == 0 {
+		log.Printf("invalid value for environment variable %s: must contain at least one address", key)
+		os.Exit(1)
+	}
+
+	return values
 }
