@@ -225,11 +225,25 @@ func TestNewEventConsumerAppliesCustomOptions(t *testing.T) {
 	require.NoError(t, err)
 	defer consumer.Close()
 
-	assert.Equal(t, int32(128*1024), consumer.client.OptValue(kgo.FetchMinBytes).(int32))
-	assert.Equal(t, int32(8*1024*1024), consumer.client.OptValue(kgo.FetchMaxBytes).(int32))
-	assert.Equal(t, 500*time.Millisecond, consumer.client.OptValue(kgo.FetchMaxWait).(time.Duration))
-	assert.Equal(t, int32(2*1024*1024), consumer.client.OptValue(kgo.FetchMaxPartitionBytes).(int32))
-	assert.Equal(t, 4, consumer.client.OptValue(kgo.MaxConcurrentFetches).(int))
+	fetchMinBytes, ok := consumer.client.OptValue(kgo.FetchMinBytes).(int32)
+	require.True(t, ok)
+	assert.Equal(t, int32(128*1024), fetchMinBytes)
+
+	fetchMaxBytes, ok := consumer.client.OptValue(kgo.FetchMaxBytes).(int32)
+	require.True(t, ok)
+	assert.Equal(t, int32(8*1024*1024), fetchMaxBytes)
+
+	fetchMaxWait, ok := consumer.client.OptValue(kgo.FetchMaxWait).(time.Duration)
+	require.True(t, ok)
+	assert.Equal(t, 500*time.Millisecond, fetchMaxWait)
+
+	fetchMaxPartitionBytes, ok := consumer.client.OptValue(kgo.FetchMaxPartitionBytes).(int32)
+	require.True(t, ok)
+	assert.Equal(t, int32(2*1024*1024), fetchMaxPartitionBytes)
+
+	maxConcurrentFetches, ok := consumer.client.OptValue(kgo.MaxConcurrentFetches).(int)
+	require.True(t, ok)
+	assert.Equal(t, 4, maxConcurrentFetches)
 	assert.Equal(t, 100, consumer.batchSize)
 	assert.Equal(t, 2*time.Second, consumer.batchTimeout)
 }
