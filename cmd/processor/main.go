@@ -65,10 +65,14 @@ func main() {
 
 	eventConsumer, err := consumer.NewEventConsumer(
 		cfg.RedpandaBrokers,
-		cfg.ConsumerGroup,
-		cfg.RedpandaSASLUser,
-		cfg.RedpandaSASLPassword,
-		cfg.RedpandaSASLMechanism,
+		consumer.ConnectionOptions{
+			GroupID: cfg.ConsumerGroup,
+			SASL: consumer.SASLOptions{
+				User:      cfg.RedpandaSASLUser,
+				Password:  cfg.RedpandaSASLPassword,
+				Mechanism: cfg.RedpandaSASLMechanism,
+			},
+		},
 		consumer.Options{
 			Topic:                  cfg.ConsumerTopic,
 			ResetOffset:            cfg.ConsumerResetOffset,

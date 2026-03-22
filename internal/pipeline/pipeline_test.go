@@ -10,6 +10,8 @@ import (
 	"github.com/rs/zerolog"
 )
 
+const invalidEventID = "evt-123"
+
 func TestParseUUIDKeepsValidUUID(t *testing.T) {
 	expected := uuid.New()
 
@@ -23,8 +25,8 @@ func TestParseUUIDKeepsValidUUID(t *testing.T) {
 }
 
 func TestParseUUIDDerivesDeterministicUUID(t *testing.T) {
-	first, firstDerived := parseUUID("evt-123")
-	second, secondDerived := parseUUID("evt-123")
+	first, firstDerived := parseUUID(invalidEventID)
+	second, secondDerived := parseUUID(invalidEventID)
 
 	if !firstDerived || !secondDerived {
 		t.Fatal("expected invalid event IDs to derive UUIDs")
@@ -59,7 +61,7 @@ func TestProcessEventDerivesUUIDAndClampsScreenWidth(t *testing.T) {
 	)
 
 	processed, err := p.processEvent(&models.InternalEvent{
-		EventID:   "evt-123",
+		EventID:   invalidEventID,
 		SiteID:    "site-1",
 		VisitorID: "visitor-1",
 		EventType: models.EventPageView,
@@ -75,7 +77,7 @@ func TestProcessEventDerivesUUIDAndClampsScreenWidth(t *testing.T) {
 		t.Fatalf("processEvent error = %v", err)
 	}
 
-	expectedID, _ := parseUUID("evt-123")
+	expectedID, _ := parseUUID(invalidEventID)
 	if processed.EventID != expectedID {
 		t.Fatalf("EventID = %s, want %s", processed.EventID, expectedID)
 	}

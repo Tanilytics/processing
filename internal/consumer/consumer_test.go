@@ -25,7 +25,7 @@ func TestNewEventConsumerWithoutSASL(t *testing.T) {
 	logger := zerolog.Nop()
 	brokers := []string{testBroker}
 
-	consumer, err := NewEventConsumer(brokers, testGroupID, "", "", "", testOptions(), testPipeline(), &logger)
+	consumer, err := NewEventConsumer(brokers, ConnectionOptions{GroupID: testGroupID}, testOptions(), testPipeline(), &logger)
 
 	require.NoError(t, err)
 	assert.NotNil(t, consumer)
@@ -38,7 +38,20 @@ func TestNewEventConsumerWithSASLSHA256(t *testing.T) {
 	logger := zerolog.Nop()
 	brokers := []string{testBroker}
 
-	consumer, err := NewEventConsumer(brokers, testGroupID, "user", "pass", "SCRAM-SHA-256", testOptions(), testPipeline(), &logger)
+	consumer, err := NewEventConsumer(
+		brokers,
+		ConnectionOptions{
+			GroupID: testGroupID,
+			SASL: SASLOptions{
+				User:      "user",
+				Password:  "pass",
+				Mechanism: "SCRAM-SHA-256",
+			},
+		},
+		testOptions(),
+		testPipeline(),
+		&logger,
+	)
 
 	require.NoError(t, err)
 	assert.NotNil(t, consumer)
@@ -49,7 +62,20 @@ func TestNewEventConsumerWithSASLSHA512(t *testing.T) {
 	logger := zerolog.Nop()
 	brokers := []string{testBroker}
 
-	consumer, err := NewEventConsumer(brokers, testGroupID, "user", "pass", "SCRAM-SHA-512", testOptions(), testPipeline(), &logger)
+	consumer, err := NewEventConsumer(
+		brokers,
+		ConnectionOptions{
+			GroupID: testGroupID,
+			SASL: SASLOptions{
+				User:      "user",
+				Password:  "pass",
+				Mechanism: "SCRAM-SHA-512",
+			},
+		},
+		testOptions(),
+		testPipeline(),
+		&logger,
+	)
 
 	require.NoError(t, err)
 	assert.NotNil(t, consumer)
@@ -60,7 +86,19 @@ func TestNewEventConsumerWithEmptyMechanismFallsBackToSHA256(t *testing.T) {
 	logger := zerolog.Nop()
 	brokers := []string{testBroker}
 
-	consumer, err := NewEventConsumer(brokers, testGroupID, "user", "pass", "", testOptions(), testPipeline(), &logger)
+	consumer, err := NewEventConsumer(
+		brokers,
+		ConnectionOptions{
+			GroupID: testGroupID,
+			SASL: SASLOptions{
+				User:     "user",
+				Password: "pass",
+			},
+		},
+		testOptions(),
+		testPipeline(),
+		&logger,
+	)
 
 	require.NoError(t, err)
 	assert.NotNil(t, consumer)
@@ -70,7 +108,20 @@ func TestNewEventConsumerWithUnknownMechanismFallsBackToSHA256(t *testing.T) {
 	logger := zerolog.Nop()
 	brokers := []string{testBroker}
 
-	consumer, err := NewEventConsumer(brokers, testGroupID, "user", "pass", "UNKNOWN-MECH", testOptions(), testPipeline(), &logger)
+	consumer, err := NewEventConsumer(
+		brokers,
+		ConnectionOptions{
+			GroupID: testGroupID,
+			SASL: SASLOptions{
+				User:      "user",
+				Password:  "pass",
+				Mechanism: "UNKNOWN-MECH",
+			},
+		},
+		testOptions(),
+		testPipeline(),
+		&logger,
+	)
 
 	require.NoError(t, err)
 	assert.NotNil(t, consumer)
@@ -80,7 +131,7 @@ func TestNewEventConsumerWithMultipleBrokers(t *testing.T) {
 	logger := zerolog.Nop()
 	brokers := []string{"broker1:9092", "broker2:9092", "broker3:9092"}
 
-	consumer, err := NewEventConsumer(brokers, testGroupID, "", "", "", testOptions(), testPipeline(), &logger)
+	consumer, err := NewEventConsumer(brokers, ConnectionOptions{GroupID: testGroupID}, testOptions(), testPipeline(), &logger)
 
 	require.NoError(t, err)
 	assert.NotNil(t, consumer)
@@ -90,7 +141,7 @@ func TestEventConsumerClose(t *testing.T) {
 	logger := zerolog.Nop()
 	brokers := []string{testBroker}
 
-	consumer, err := NewEventConsumer(brokers, testGroupID, "", "", "", testOptions(), testPipeline(), &logger)
+	consumer, err := NewEventConsumer(brokers, ConnectionOptions{GroupID: testGroupID}, testOptions(), testPipeline(), &logger)
 	require.NoError(t, err)
 
 	assert.NotPanics(t, func() {
@@ -196,7 +247,7 @@ func TestRunContextCancellation(t *testing.T) {
 	logger := zerolog.Nop()
 	brokers := []string{testBroker}
 
-	consumer, err := NewEventConsumer(brokers, testGroupID, "", "", "", testOptions(), testPipeline(), &logger)
+	consumer, err := NewEventConsumer(brokers, ConnectionOptions{GroupID: testGroupID}, testOptions(), testPipeline(), &logger)
 	require.NoError(t, err)
 	defer consumer.Close()
 
@@ -221,7 +272,7 @@ func TestNewEventConsumerAppliesCustomOptions(t *testing.T) {
 		BatchTimeout:           2 * time.Second,
 	}
 
-	consumer, err := NewEventConsumer([]string{testBroker}, testGroupID, "", "", "", opts, testPipeline(), &logger)
+	consumer, err := NewEventConsumer([]string{testBroker}, ConnectionOptions{GroupID: testGroupID}, opts, testPipeline(), &logger)
 	require.NoError(t, err)
 	defer consumer.Close()
 
@@ -263,10 +314,7 @@ func TestNewEventConsumerRejectsInvalidResetOffset(t *testing.T) {
 
 	consumer, err := NewEventConsumer(
 		[]string{testBroker},
-		testGroupID,
-		"",
-		"",
-		"",
+		ConnectionOptions{GroupID: testGroupID},
 		invalidResetOptions(),
 		testPipeline(),
 		&logger,
@@ -282,7 +330,7 @@ func TestNewEventConsumerRejectsNonPositiveFetchMaxBytes(t *testing.T) {
 	opts := testOptions()
 	opts.FetchMaxBytes = 0
 
-	consumer, err := NewEventConsumer([]string{testBroker}, testGroupID, "", "", "", opts, testPipeline(), &logger)
+	consumer, err := NewEventConsumer([]string{testBroker}, ConnectionOptions{GroupID: testGroupID}, opts, testPipeline(), &logger)
 
 	require.Error(t, err)
 	assert.Nil(t, consumer)
@@ -294,7 +342,7 @@ func TestNewEventConsumerRejectsNonPositiveBatchSize(t *testing.T) {
 	opts := testOptions()
 	opts.BatchSize = 0
 
-	consumer, err := NewEventConsumer([]string{testBroker}, testGroupID, "", "", "", opts, testPipeline(), &logger)
+	consumer, err := NewEventConsumer([]string{testBroker}, ConnectionOptions{GroupID: testGroupID}, opts, testPipeline(), &logger)
 
 	require.Error(t, err)
 	assert.Nil(t, consumer)
@@ -306,7 +354,7 @@ func TestNewEventConsumerRejectsNonPositiveBatchTimeout(t *testing.T) {
 	opts := testOptions()
 	opts.BatchTimeout = 0
 
-	consumer, err := NewEventConsumer([]string{testBroker}, testGroupID, "", "", "", opts, testPipeline(), &logger)
+	consumer, err := NewEventConsumer([]string{testBroker}, ConnectionOptions{GroupID: testGroupID}, opts, testPipeline(), &logger)
 
 	require.Error(t, err)
 	assert.Nil(t, consumer)

@@ -19,6 +19,13 @@ func NewAnonymizer(salt string) *Anonymizer {
 // geo lookup is stubbed. will add MaxMind GeoIP later
 func (a *Anonymizer) Anonymize(rawIP string) (ipHash, country, region string) {
 	truncated := truncateIP(rawIP)
+	if truncated == "" {
+		// Keep IP as unknown when parsing fails.
+		country = ""
+		region = ""
+		return
+	}
+
 	hash := sha256.Sum256([]byte(truncated + a.dailySalt))
 	ipHash = fmt.Sprintf("%x", hash[:16]) // 32-char hex
 

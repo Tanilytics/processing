@@ -8,6 +8,8 @@ import (
 	"time"
 )
 
+const invalidEnvVarLogFormat = "invalid value for environment variable %s: %v"
+
 type ProcessorConfig struct {
 	Port                 string
 	RedpandaBrokers      []string
@@ -86,7 +88,7 @@ func getEnvInt(key string) int {
 
 	i, err := strconv.Atoi(strings.TrimSpace(v))
 	if err != nil {
-		log.Printf("invalid value for environment variable %s: %v", key, err)
+		log.Printf(invalidEnvVarLogFormat, key, err)
 		os.Exit(1)
 	}
 
@@ -98,7 +100,7 @@ func getEnvInt32(key string) int32 {
 
 	i, err := strconv.ParseInt(strings.TrimSpace(v), 10, 32)
 	if err != nil {
-		log.Printf("invalid value for environment variable %s: %v", key, err)
+		log.Printf(invalidEnvVarLogFormat, key, err)
 		os.Exit(1)
 	}
 
@@ -110,7 +112,7 @@ func getEnvDuration(key string) time.Duration {
 
 	d, err := time.ParseDuration(strings.TrimSpace(v))
 	if err != nil {
-		log.Printf("invalid value for environment variable %s: %v", key, err)
+		log.Printf(invalidEnvVarLogFormat, key, err)
 		os.Exit(1)
 	}
 
