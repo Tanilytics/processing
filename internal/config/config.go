@@ -21,6 +21,12 @@ type ProcessorConfig struct {
 	// Supported values: "SCRAM-SHA-256" (default), "SCRAM-SHA-512".
 	// Leave empty to disable SASL.
 	RedpandaSASLMechanism          string
+	DLQTopic                       string
+	DLQProducerBatchMaxBytes       int32
+	DLQProducerLinger              time.Duration
+	DLQProducerMaxBufferedRecords  int
+	DLQProducerRecordRetries       int
+	DLQProducerRetryTimeout        time.Duration
 	ConsumerGroup                  string
 	ConsumerTopic                  string
 	ConsumerResetOffset            string
@@ -47,17 +53,23 @@ type ProcessorConfig struct {
 
 func LoadProcessorConfig() ProcessorConfig {
 	return ProcessorConfig{
-		Port:                  getEnv("PROCESSING_PORT"),
-		RedpandaBrokers:       strings.Split(getEnv("REDPANDA_BROKERS"), ","),
-		RedpandaSASLUser:      getEnv("REDPANDA_SASL_USER"),
-		RedpandaSASLPassword:  getEnv("REDPANDA_SASL_PASSWORD"),
-		RedpandaSASLMechanism: getEnv("REDPANDA_SASL_MECHANISM"),
-		ConsumerGroup:         getEnv("CONSUMER_GROUP"),
-		ConsumerTopic:         getEnv("CONSUMER_TOPIC"),
-		ConsumerResetOffset:   getEnv("CONSUMER_RESET_OFFSET"),
-		ConsumerFetchMinBytes: getEnvInt32("CONSUMER_FETCH_MIN_BYTES"),
-		ConsumerFetchMaxBytes: getEnvInt32("CONSUMER_FETCH_MAX_BYTES"),
-		ConsumerFetchMaxWait:  getEnvDuration("CONSUMER_FETCH_MAX_WAIT"),
+		Port:                          getEnv("PROCESSING_PORT"),
+		RedpandaBrokers:               strings.Split(getEnv("REDPANDA_BROKERS"), ","),
+		RedpandaSASLUser:              getEnv("REDPANDA_SASL_USER"),
+		RedpandaSASLPassword:          getEnv("REDPANDA_SASL_PASSWORD"),
+		RedpandaSASLMechanism:         getEnv("REDPANDA_SASL_MECHANISM"),
+		DLQTopic:                      getEnv("DLQ_TOPIC"),
+		DLQProducerBatchMaxBytes:      getEnvInt32("DLQ_PRODUCER_BATCH_MAX_BYTES"),
+		DLQProducerLinger:             getEnvDuration("DLQ_PRODUCER_LINGER"),
+		DLQProducerMaxBufferedRecords: getEnvInt("DLQ_PRODUCER_MAX_BUFFERED_RECORDS"),
+		DLQProducerRecordRetries:      getEnvInt("DLQ_PRODUCER_RECORD_RETRIES"),
+		DLQProducerRetryTimeout:       getEnvDuration("DLQ_PRODUCER_RETRY_TIMEOUT"),
+		ConsumerGroup:                 getEnv("CONSUMER_GROUP"),
+		ConsumerTopic:                 getEnv("CONSUMER_TOPIC"),
+		ConsumerResetOffset:           getEnv("CONSUMER_RESET_OFFSET"),
+		ConsumerFetchMinBytes:         getEnvInt32("CONSUMER_FETCH_MIN_BYTES"),
+		ConsumerFetchMaxBytes:         getEnvInt32("CONSUMER_FETCH_MAX_BYTES"),
+		ConsumerFetchMaxWait:          getEnvDuration("CONSUMER_FETCH_MAX_WAIT"),
 		ConsumerFetchMaxPartitionBytes: getEnvInt32(
 			"CONSUMER_FETCH_MAX_PARTITION_BYTES",
 		),
@@ -93,8 +105,11 @@ func getEnv(key string) string {
 
 func getEnvInt(key string) int {
 	v := getEnv(key)
+	return parseInt(key, v)
+}
 
-	i, err := strconv.Atoi(strings.TrimSpace(v))
+func parseInt(key, value string) int {
+	i, err := strconv.Atoi(strings.TrimSpace(value))
 	if err != nil {
 		log.Printf(invalidEnvVarLogFormat, key, err)
 		os.Exit(1)
@@ -105,8 +120,11 @@ func getEnvInt(key string) int {
 
 func getEnvInt32(key string) int32 {
 	v := getEnv(key)
+	return parseInt32(key, v)
+}
 
-	i, err := strconv.ParseInt(strings.TrimSpace(v), 10, 32)
+func parseInt32(key, value string) int32 {
+	i, err := strconv.ParseInt(strings.TrimSpace(value), 10, 32)
 	if err != nil {
 		log.Printf(invalidEnvVarLogFormat, key, err)
 		os.Exit(1)
@@ -117,8 +135,11 @@ func getEnvInt32(key string) int32 {
 
 func getEnvDuration(key string) time.Duration {
 	v := getEnv(key)
+	return parseDuration(key, v)
+}
 
-	d, err := time.ParseDuration(strings.TrimSpace(v))
+func parseDuration(key, value string) time.Duration {
+	d, err := time.ParseDuration(strings.TrimSpace(value))
 	if err != nil {
 		log.Printf(invalidEnvVarLogFormat, key, err)
 		os.Exit(1)

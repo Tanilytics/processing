@@ -3,6 +3,7 @@ package consumer
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -17,15 +18,46 @@ import (
 )
 
 const (
-	testBroker  = "localhost:9092"
-	testGroupID = "test-group"
+	testBroker          = "localhost:9092"
+	testGroupID         = "test-group"
+	testRawEventsTopic  = "raw-events"
+	testInvalidJSONBody = "{invalid json}"
 )
+
+type fakeDLQProducer struct {
+	produced []producedRecord
+	err      error
+}
+
+type producedRecord struct {
+	key     string
+	value   []byte
+	headers []kgo.RecordHeader
+}
+
+func (p *fakeDLQProducer) ProduceSync(
+	_ context.Context,
+	key string,
+	value []byte,
+	headers []kgo.RecordHeader,
+) error {
+	if p.err != nil {
+		return p.err
+	}
+
+	p.produced = append(p.produced, producedRecord{
+		key:     key,
+		value:   append([]byte(nil), value...),
+		headers: append([]kgo.RecordHeader(nil), headers...),
+	})
+	return nil
+}
 
 func TestNewEventConsumerWithoutSASL(t *testing.T) {
 	logger := zerolog.Nop()
 	brokers := []string{testBroker}
 
-	consumer, err := NewEventConsumer(brokers, ConnectionOptions{GroupID: testGroupID}, testOptions(), testPipeline(), &logger)
+	consumer, err := NewEventConsumer(brokers, ConnectionOptions{GroupID: testGroupID}, testOptions(), &fakeDLQProducer{}, testPipeline(), &logger)
 
 	require.NoError(t, err)
 	assert.NotNil(t, consumer)
@@ -49,6 +81,7 @@ func TestNewEventConsumerWithSASLSHA256(t *testing.T) {
 			},
 		},
 		testOptions(),
+		&fakeDLQProducer{},
 		testPipeline(),
 		&logger,
 	)
@@ -73,6 +106,7 @@ func TestNewEventConsumerWithSASLSHA512(t *testing.T) {
 			},
 		},
 		testOptions(),
+		&fakeDLQProducer{},
 		testPipeline(),
 		&logger,
 	)
@@ -96,6 +130,7 @@ func TestNewEventConsumerWithEmptyMechanismFallsBackToSHA256(t *testing.T) {
 			},
 		},
 		testOptions(),
+		&fakeDLQProducer{},
 		testPipeline(),
 		&logger,
 	)
@@ -119,6 +154,7 @@ func TestNewEventConsumerWithUnknownMechanismFallsBackToSHA256(t *testing.T) {
 			},
 		},
 		testOptions(),
+		&fakeDLQProducer{},
 		testPipeline(),
 		&logger,
 	)
@@ -131,7 +167,7 @@ func TestNewEventConsumerWithMultipleBrokers(t *testing.T) {
 	logger := zerolog.Nop()
 	brokers := []string{"broker1:9092", "broker2:9092", "broker3:9092"}
 
-	consumer, err := NewEventConsumer(brokers, ConnectionOptions{GroupID: testGroupID}, testOptions(), testPipeline(), &logger)
+	consumer, err := NewEventConsumer(brokers, ConnectionOptions{GroupID: testGroupID}, testOptions(), &fakeDLQProducer{}, testPipeline(), &logger)
 
 	require.NoError(t, err)
 	assert.NotNil(t, consumer)
@@ -141,7 +177,7 @@ func TestEventConsumerClose(t *testing.T) {
 	logger := zerolog.Nop()
 	brokers := []string{testBroker}
 
-	consumer, err := NewEventConsumer(brokers, ConnectionOptions{GroupID: testGroupID}, testOptions(), testPipeline(), &logger)
+	consumer, err := NewEventConsumer(brokers, ConnectionOptions{GroupID: testGroupID}, testOptions(), &fakeDLQProducer{}, testPipeline(), &logger)
 	require.NoError(t, err)
 
 	assert.NotPanics(t, func() {
@@ -218,7 +254,7 @@ func TestInternalEventUnmarshalMinimalEvent(t *testing.T) {
 }
 
 func TestInternalEventUnmarshalInvalidJSON(t *testing.T) {
-	invalidJSON := `{invalid json}`
+	invalidJSON := testInvalidJSONBody
 
 	var event models.InternalEvent
 	err := json.Unmarshal([]byte(invalidJSON), &event)
@@ -247,7 +283,7 @@ func TestRunContextCancellation(t *testing.T) {
 	logger := zerolog.Nop()
 	brokers := []string{testBroker}
 
-	consumer, err := NewEventConsumer(brokers, ConnectionOptions{GroupID: testGroupID}, testOptions(), testPipeline(), &logger)
+	consumer, err := NewEventConsumer(brokers, ConnectionOptions{GroupID: testGroupID}, testOptions(), &fakeDLQProducer{}, testPipeline(), &logger)
 	require.NoError(t, err)
 	defer consumer.Close()
 
@@ -273,7 +309,7 @@ func TestNewEventConsumerAppliesCustomOptions(t *testing.T) {
 		BatchTimeout:           2 * time.Second,
 	}
 
-	consumer, err := NewEventConsumer([]string{testBroker}, ConnectionOptions{GroupID: testGroupID}, opts, testPipeline(), &logger)
+	consumer, err := NewEventConsumer([]string{testBroker}, ConnectionOptions{GroupID: testGroupID}, opts, &fakeDLQProducer{}, testPipeline(), &logger)
 	require.NoError(t, err)
 	defer consumer.Close()
 
@@ -323,6 +359,7 @@ func TestNewEventConsumerRejectsInvalidResetOffset(t *testing.T) {
 		[]string{testBroker},
 		ConnectionOptions{GroupID: testGroupID},
 		invalidResetOptions(),
+		&fakeDLQProducer{},
 		testPipeline(),
 		&logger,
 	)
@@ -337,7 +374,7 @@ func TestNewEventConsumerRejectsNonPositiveFetchMaxBytes(t *testing.T) {
 	opts := testOptions()
 	opts.FetchMaxBytes = 0
 
-	consumer, err := NewEventConsumer([]string{testBroker}, ConnectionOptions{GroupID: testGroupID}, opts, testPipeline(), &logger)
+	consumer, err := NewEventConsumer([]string{testBroker}, ConnectionOptions{GroupID: testGroupID}, opts, &fakeDLQProducer{}, testPipeline(), &logger)
 
 	require.Error(t, err)
 	assert.Nil(t, consumer)
@@ -349,7 +386,7 @@ func TestNewEventConsumerRejectsNonPositiveBatchSize(t *testing.T) {
 	opts := testOptions()
 	opts.BatchSize = 0
 
-	consumer, err := NewEventConsumer([]string{testBroker}, ConnectionOptions{GroupID: testGroupID}, opts, testPipeline(), &logger)
+	consumer, err := NewEventConsumer([]string{testBroker}, ConnectionOptions{GroupID: testGroupID}, opts, &fakeDLQProducer{}, testPipeline(), &logger)
 
 	require.Error(t, err)
 	assert.Nil(t, consumer)
@@ -361,7 +398,7 @@ func TestNewEventConsumerRejectsNonPositiveBatchTimeout(t *testing.T) {
 	opts := testOptions()
 	opts.BatchTimeout = 0
 
-	consumer, err := NewEventConsumer([]string{testBroker}, ConnectionOptions{GroupID: testGroupID}, opts, testPipeline(), &logger)
+	consumer, err := NewEventConsumer([]string{testBroker}, ConnectionOptions{GroupID: testGroupID}, opts, &fakeDLQProducer{}, testPipeline(), &logger)
 
 	require.Error(t, err)
 	assert.Nil(t, consumer)
@@ -377,9 +414,87 @@ func TestShouldFlushBatch(t *testing.T) {
 	assert.True(t, shouldFlushBatch(10, now, 100, time.Second, now.Add(time.Second)))
 }
 
+func TestHandleRecordRoutesMalformedJSONToDLQ(t *testing.T) {
+	logger := zerolog.Nop()
+	dlqProducer := &fakeDLQProducer{}
+	consumer := &EventConsumer{dlqProducer: dlqProducer, logger: &logger}
+	batch := &consumerBatch{}
+	record := &kgo.Record{
+		Topic:     testRawEventsTopic,
+		Partition: 7,
+		Offset:    11,
+		Value:     []byte(testInvalidJSONBody),
+	}
+
+	err := consumer.handleRecord(context.Background(), batch, record)
+
+	require.NoError(t, err)
+	require.Empty(t, batch.pending)
+	require.Len(t, dlqProducer.produced, 1)
+	assert.Equal(t, testRawEventsTopic+":7:11", dlqProducer.produced[0].key)
+	assert.Equal(t, []byte(testInvalidJSONBody), dlqProducer.produced[0].value)
+	assertHeaderValue(t, dlqProducer.produced[0].headers, "source_topic", testRawEventsTopic)
+	assertHeaderValue(t, dlqProducer.produced[0].headers, "source_partition", "7")
+	assertHeaderValue(t, dlqProducer.produced[0].headers, "source_offset", "11")
+	assertHeaderValueContains(t, dlqProducer.produced[0].headers, "error_reason", "unmarshal event")
+	assertHeaderValueContains(t, dlqProducer.produced[0].headers, "failed_at", "T")
+}
+
+func TestHandleRecordReturnsDLQError(t *testing.T) {
+	logger := zerolog.Nop()
+	dlqProducer := &fakeDLQProducer{err: errors.New("boom")}
+	consumer := &EventConsumer{dlqProducer: dlqProducer, logger: &logger}
+	batch := &consumerBatch{}
+	record := &kgo.Record{Topic: testRawEventsTopic, Value: []byte(testInvalidJSONBody)}
+
+	err := consumer.handleRecord(context.Background(), batch, record)
+
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "route poison record to dlq")
+	require.Empty(t, batch.pending)
+	require.Empty(t, dlqProducer.produced)
+}
+
+func TestHandleRecordAppendsValidEvent(t *testing.T) {
+	logger := zerolog.Nop()
+	dlqProducer := &fakeDLQProducer{}
+	consumer := &EventConsumer{dlqProducer: dlqProducer, logger: &logger}
+	batch := &consumerBatch{}
+	record := &kgo.Record{Value: []byte(`{"event_id":"evt-1","site_id":"site-1","visitor_id":"vis-1","event_type":"page_view","timestamp":1700000000000,"url":"https://example.com"}`)}
+
+	err := consumer.handleRecord(context.Background(), batch, record)
+
+	require.NoError(t, err)
+	require.Len(t, batch.pending, 1)
+	assert.Equal(t, "evt-1", batch.pending[0].EventID)
+	assert.Empty(t, dlqProducer.produced)
+}
+
+func assertHeaderValue(t *testing.T, headers []kgo.RecordHeader, key, want string) {
+	t.Helper()
+	assert.Equal(t, want, headerValue(t, headers, key))
+}
+
+func assertHeaderValueContains(t *testing.T, headers []kgo.RecordHeader, key, want string) {
+	t.Helper()
+	assert.Contains(t, headerValue(t, headers, key), want)
+}
+
+func headerValue(t *testing.T, headers []kgo.RecordHeader, key string) string {
+	t.Helper()
+	for _, header := range headers {
+		if header.Key == key {
+			return string(header.Value)
+		}
+	}
+
+	t.Fatalf("missing header %q", key)
+	return ""
+}
+
 func testOptions() Options {
 	return Options{
-		Topic:                  "raw-events",
+		Topic:                  testRawEventsTopic,
 		ResetOffset:            "end",
 		FetchMinBytes:          64 * 1024,
 		FetchMaxBytes:          50 * 1024 * 1024,
