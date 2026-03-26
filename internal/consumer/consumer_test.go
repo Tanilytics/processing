@@ -18,8 +18,10 @@ import (
 )
 
 const (
-	testBroker  = "localhost:9092"
-	testGroupID = "test-group"
+	testBroker          = "localhost:9092"
+	testGroupID         = "test-group"
+	testRawEventsTopic  = "raw-events"
+	testInvalidJSONBody = "{invalid json}"
 )
 
 type fakeDLQProducer struct {
@@ -252,7 +254,7 @@ func TestInternalEventUnmarshalMinimalEvent(t *testing.T) {
 }
 
 func TestInternalEventUnmarshalInvalidJSON(t *testing.T) {
-	invalidJSON := `{invalid json}`
+	invalidJSON := testInvalidJSONBody
 
 	var event models.InternalEvent
 	err := json.Unmarshal([]byte(invalidJSON), &event)
@@ -418,10 +420,10 @@ func TestHandleRecordRoutesMalformedJSONToDLQ(t *testing.T) {
 	consumer := &EventConsumer{dlqProducer: dlqProducer, logger: &logger}
 	batch := &consumerBatch{}
 	record := &kgo.Record{
-		Topic:     "raw-events",
+		Topic:     testRawEventsTopic,
 		Partition: 7,
 		Offset:    11,
-		Value:     []byte("{invalid json}"),
+		Value:     []byte(testInvalidJSONBody),
 	}
 
 	err := consumer.handleRecord(context.Background(), batch, record)
@@ -429,9 +431,9 @@ func TestHandleRecordRoutesMalformedJSONToDLQ(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, batch.pending)
 	require.Len(t, dlqProducer.produced, 1)
-	assert.Equal(t, "raw-events:7:11", dlqProducer.produced[0].key)
-	assert.Equal(t, []byte("{invalid json}"), dlqProducer.produced[0].value)
-	assertHeaderValue(t, dlqProducer.produced[0].headers, "source_topic", "raw-events")
+	assert.Equal(t, testRawEventsTopic+":7:11", dlqProducer.produced[0].key)
+	assert.Equal(t, []byte(testInvalidJSONBody), dlqProducer.produced[0].value)
+	assertHeaderValue(t, dlqProducer.produced[0].headers, "source_topic", testRawEventsTopic)
 	assertHeaderValue(t, dlqProducer.produced[0].headers, "source_partition", "7")
 	assertHeaderValue(t, dlqProducer.produced[0].headers, "source_offset", "11")
 	assertHeaderValueContains(t, dlqProducer.produced[0].headers, "error_reason", "unmarshal event")
@@ -443,7 +445,7 @@ func TestHandleRecordReturnsDLQError(t *testing.T) {
 	dlqProducer := &fakeDLQProducer{err: errors.New("boom")}
 	consumer := &EventConsumer{dlqProducer: dlqProducer, logger: &logger}
 	batch := &consumerBatch{}
-	record := &kgo.Record{Topic: "raw-events", Value: []byte("{invalid json}")}
+	record := &kgo.Record{Topic: testRawEventsTopic, Value: []byte(testInvalidJSONBody)}
 
 	err := consumer.handleRecord(context.Background(), batch, record)
 
@@ -492,7 +494,7 @@ func headerValue(t *testing.T, headers []kgo.RecordHeader, key string) string {
 
 func testOptions() Options {
 	return Options{
-		Topic:                  "raw-events",
+		Topic:                  testRawEventsTopic,
 		ResetOffset:            "end",
 		FetchMinBytes:          64 * 1024,
 		FetchMaxBytes:          50 * 1024 * 1024,

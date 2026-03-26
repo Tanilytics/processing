@@ -21,6 +21,8 @@ import (
 	"github.com/rs/zerolog"
 )
 
+const clickhouseWriterShutdownErrorMsg = "clickhouse writer shutdown error"
+
 func main() {
 	// 1. Load configuration
 	cfg := config.LoadProcessorConfig()
@@ -81,7 +83,7 @@ func main() {
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to initialize dlq producer")
 		if closeErr := chWriter.Close(); closeErr != nil {
-			logger.Error().Err(closeErr).Msg("clickhouse writer shutdown error")
+			logger.Error().Err(closeErr).Msg(clickhouseWriterShutdownErrorMsg)
 		}
 		return
 	}
@@ -116,7 +118,7 @@ func main() {
 		logger.Error().Err(err).Msg("failed to initialize consumer")
 		dlqProducer.Close()
 		if closeErr := chWriter.Close(); closeErr != nil {
-			logger.Error().Err(closeErr).Msg("clickhouse writer shutdown error")
+			logger.Error().Err(closeErr).Msg(clickhouseWriterShutdownErrorMsg)
 		}
 		return
 	}
@@ -158,7 +160,7 @@ func main() {
 	eventConsumer.Close()
 	dlqProducer.Close()
 	if err := chWriter.Close(); err != nil {
-		logger.Error().Err(err).Msg("clickhouse writer shutdown error")
+		logger.Error().Err(err).Msg(clickhouseWriterShutdownErrorMsg)
 	}
 
 	logger.Info().Msg("shutdown complete")
