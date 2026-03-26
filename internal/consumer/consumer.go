@@ -15,6 +15,10 @@ import (
 	"github.com/twmb/franz-go/pkg/sasl/scram"
 )
 
+type DLQProducer interface {
+	ProduceSync(ctx context.Context, key string, value []byte, headers []kgo.RecordHeader) error
+}
+
 type Options struct {
 	Topic                  string
 	ResetOffset            string
@@ -41,6 +45,7 @@ type SASLOptions struct {
 
 type EventConsumer struct {
 	client               *kgo.Client
+	dlqProducer          DLQProducer
 	pipeline             *pipeline.Pipeline
 	logger               *zerolog.Logger
 	batchSize            int
@@ -53,7 +58,14 @@ type consumerBatch struct {
 	startedAt time.Time
 }
 
-func NewEventConsumer(brokers []string, connection ConnectionOptions, options Options, p *pipeline.Pipeline, logger *zerolog.Logger) (*EventConsumer, error) {
+func NewEventConsumer(
+	brokers []string,
+	connection ConnectionOptions,
+	options Options,
+	dlqProducer DLQProducer,
+	p *pipeline.Pipeline,
+	logger *zerolog.Logger,
+) (*EventConsumer, error) {
 	if strings.TrimSpace(options.Topic) == "" {
 		return nil, fmt.Errorf("topic must not be empty")
 	}
@@ -121,6 +133,7 @@ func NewEventConsumer(brokers []string, connection ConnectionOptions, options Op
 	}
 	return &EventConsumer{
 		client:               client,
+		dlqProducer:          dlqProducer,
 		pipeline:             p,
 		logger:               logger,
 		batchSize:            options.BatchSize,
@@ -179,7 +192,10 @@ func (c *EventConsumer) runBlockedOnce(ctx context.Context) error {
 	}
 
 	batch := consumerBatch{}
-	recordsFetched := c.collectPending(fetches, &batch)
+	recordsFetched, err := c.collectPending(ctx, fetches, &batch)
+	if err != nil {
+		return err
+	}
 	if len(batch.pending) == 0 {
 		c.commitFetchedOffsets(ctx, recordsFetched)
 		return nil
@@ -206,7 +222,10 @@ func (c *EventConsumer) runOnce(ctx context.Context, batch *consumerBatch) error
 		return nil
 	}
 
-	recordsFetched := c.collectPending(fetches, batch)
+	recordsFetched, err := c.collectPending(ctx, fetches, batch)
+	if err != nil {
+		return err
+	}
 	if len(batch.pending) == 0 {
 		c.commitFetchedOffsets(ctx, recordsFetched)
 		return nil
@@ -273,32 +292,75 @@ func (c *EventConsumer) pollFetches(ctx context.Context, batch *consumerBatch) (
 	return fetches, pollErr, true
 }
 
-func (c *EventConsumer) collectPending(fetches kgo.Fetches, batch *consumerBatch) int {
+func (c *EventConsumer) collectPending(ctx context.Context, fetches kgo.Fetches, batch *consumerBatch) (int, error) {
 	c.logFetchErrors(fetches)
 
 	batchWasEmpty := len(batch.pending) == 0
 	recordsFetched := 0
+	var collectErr error
 	fetches.EachRecord(func(record *kgo.Record) {
-		recordsFetched++
-
-		var event models.InternalEvent
-		if err := json.Unmarshal(record.Value, &event); err != nil {
-			c.logger.Error().
-				Err(err).
-				Int32("partition", record.Partition).
-				Int64("offset", record.Offset).
-				Msg("unmarshal event")
-			return // skip malformed records (will be DLQ'd when I feel like doing it)
+		if collectErr != nil {
+			return
 		}
 
-		batch.pending = append(batch.pending, &event)
+		recordsFetched++
+
+		if err := c.handleRecord(ctx, batch, record); err != nil {
+			collectErr = err
+		}
 	})
 
 	if batchWasEmpty && len(batch.pending) > 0 {
 		batch.startedAt = time.Now()
 	}
 
-	return recordsFetched
+	return recordsFetched, collectErr
+}
+
+func (c *EventConsumer) handleRecord(ctx context.Context, batch *consumerBatch, record *kgo.Record) error {
+	var event models.InternalEvent
+	if err := json.Unmarshal(record.Value, &event); err != nil {
+		reason := fmt.Sprintf("unmarshal event: %v", err)
+		c.logger.Error().
+			Err(err).
+			Str("topic", record.Topic).
+			Int32("partition", record.Partition).
+			Int64("offset", record.Offset).
+			Msg("unmarshal event")
+
+		if err := c.routeToDLQ(ctx, record, reason); err != nil {
+			return fmt.Errorf("route poison record to dlq: %w", err)
+		}
+
+		return nil
+	}
+
+	batch.pending = append(batch.pending, &event)
+	return nil
+}
+
+func (c *EventConsumer) routeToDLQ(ctx context.Context, record *kgo.Record, reason string) error {
+	key := fmt.Sprintf("%s:%d:%d", record.Topic, record.Partition, record.Offset)
+	headers := []kgo.RecordHeader{
+		{Key: "error_reason", Value: []byte(reason)},
+		{Key: "source_topic", Value: []byte(record.Topic)},
+		{Key: "source_partition", Value: fmt.Appendf(nil, "%d", record.Partition)},
+		{Key: "source_offset", Value: fmt.Appendf(nil, "%d", record.Offset)},
+		{Key: "failed_at", Value: []byte(time.Now().UTC().Format(time.RFC3339))},
+	}
+
+	if err := c.dlqProducer.ProduceSync(ctx, key, record.Value, headers); err != nil {
+		return err
+	}
+
+	c.logger.Warn().
+		Str("topic", record.Topic).
+		Int32("partition", record.Partition).
+		Int64("offset", record.Offset).
+		Str("reason", reason).
+		Msg("routed poison record to dlq")
+
+	return nil
 }
 
 func (c *EventConsumer) logFetchErrors(fetches kgo.Fetches) {

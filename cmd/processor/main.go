@@ -15,6 +15,7 @@ import (
 	"github.com/Tanilytics/processing/internal/observability"
 	"github.com/Tanilytics/processing/internal/pipeline"
 	"github.com/Tanilytics/processing/internal/processors"
+	"github.com/Tanilytics/processing/internal/producer"
 	"github.com/Tanilytics/processing/internal/server"
 	"github.com/Tanilytics/processing/internal/storage"
 	"github.com/rs/zerolog"
@@ -58,6 +59,32 @@ func main() {
 	}
 
 	processorPipeline := pipeline.NewPipeline(anonymizer, uaParser, chWriter, logger)
+	dlqProducer, err := producer.NewRedpandaProducer(
+		cfg.RedpandaBrokers,
+		producer.ConnectionOptions{
+			SASL: producer.SASLOptions{
+				User:      cfg.RedpandaSASLUser,
+				Password:  cfg.RedpandaSASLPassword,
+				Mechanism: cfg.RedpandaSASLMechanism,
+			},
+		},
+		producer.Options{
+			Topic:              cfg.DLQTopic,
+			BatchMaxBytes:      cfg.DLQProducerBatchMaxBytes,
+			Linger:             cfg.DLQProducerLinger,
+			MaxBufferedRecords: cfg.DLQProducerMaxBufferedRecords,
+			RecordRetries:      cfg.DLQProducerRecordRetries,
+			RetryTimeout:       cfg.DLQProducerRetryTimeout,
+		},
+		logger,
+	)
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to initialize dlq producer")
+		if closeErr := chWriter.Close(); closeErr != nil {
+			logger.Error().Err(closeErr).Msg("clickhouse writer shutdown error")
+		}
+		return
+	}
 
 	eventConsumer, err := consumer.NewEventConsumer(
 		cfg.RedpandaBrokers,
@@ -81,11 +108,16 @@ func main() {
 			BatchSize:              cfg.ClickhouseBatchSize,
 			BatchTimeout:           cfg.ClickhouseBatchTimeout,
 		},
+		dlqProducer,
 		processorPipeline,
 		logger,
 	)
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to initialize consumer")
+		dlqProducer.Close()
+		if closeErr := chWriter.Close(); closeErr != nil {
+			logger.Error().Err(closeErr).Msg("clickhouse writer shutdown error")
+		}
 		return
 	}
 
@@ -124,6 +156,7 @@ func main() {
 	gracefulShutdown(app, logger)
 	consumerWG.Wait()
 	eventConsumer.Close()
+	dlqProducer.Close()
 	if err := chWriter.Close(); err != nil {
 		logger.Error().Err(err).Msg("clickhouse writer shutdown error")
 	}
