@@ -137,6 +137,7 @@ func main() {
 	anonymizer := processors.NewAnonymizer(cfg.AnonymizationSalt)
 	uaParser := processors.NewUserAgentParser()
 	redisClient := newRedisClient(ctx, cfg.RedisURL, logger)
+	redisStore := storage.NewRedisStore(redisClient)
 
 	defer func() {
 		//nolint:errcheck
@@ -149,7 +150,7 @@ func main() {
 		return
 	}
 
-	processorPipeline := pipeline.NewPipeline(anonymizer, uaParser, sessionMgr, chWriter, logger)
+	processorPipeline := pipeline.NewPipeline(anonymizer, uaParser, sessionMgr, chWriter, redisStore, logger)
 	dlqProducer, err := newDLQProducer(cfg, logger)
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to initialize dlq producer")

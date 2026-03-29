@@ -1,0 +1,55 @@
+package storage
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"github.com/Tanilytics/processing/internal/models"
+	"github.com/redis/go-redis/v9"
+)
+
+type RedisStore struct {
+	client *redis.Client
+}
+
+func NewRedisStore(client *redis.Client) *RedisStore {
+	return &RedisStore{client: client}
+}
+
+func (r *RedisStore) UpdateCounters(ctx context.Context, events []*models.ProcessedEvent) error {
+	pipe := r.client.Pipeline()
+	now := time.Now().UTC()
+	hourKey := now.Format("2006-01-02-15") // YYYY-MM-DD-HH
+
+	for _, e := range events {
+		if e.EventType == models.EventPageView {
+			// Increment hourly page view counter
+			pvKey := fmt.Sprintf("rt:pageviews:%s:%s", e.SiteID, hourKey)
+			pipe.Incr(ctx, pvKey)
+			pipe.Expire(ctx, pvKey, 25*time.Hour)
+
+			// Add to HyperLogLog for unique visitors
+			hllKey := fmt.Sprintf("rt:visitors:%s:%s", e.SiteID, hourKey)
+			pipe.PFAdd(ctx, hllKey, e.VisitorID)
+			pipe.Expire(ctx, hllKey, 25*time.Hour)
+		}
+
+		// Track active users (sorted set: visitor_id → timestamp)
+		activeKey := fmt.Sprintf("rt:active:%s", e.SiteID)
+		pipe.ZAdd(ctx, activeKey, redis.Z{
+			Score:  float64(e.Timestamp.UnixMilli()),
+			Member: e.VisitorID,
+		})
+		// Remove visitors inactive for > 5 minutes
+		cutoff := float64(now.Add(-5 * time.Minute).UnixMilli())
+		pipe.ZRemRangeByScore(ctx, activeKey, "-inf", fmt.Sprintf("%f", cutoff))
+		pipe.Expire(ctx, activeKey, 10*time.Minute)
+	}
+
+	_, err := pipe.Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("redis pipeline: %w", err)
+	}
+	return nil
+}
