@@ -22,51 +22,24 @@ import (
 	"github.com/rs/zerolog"
 )
 
-const clickhouseWriterShutdownErrorMsg = "clickhouse writer shutdown error"
-
-func main() {
-	// 1. Load configuration
-	cfg := config.LoadProcessorConfig()
-
-	// 2. Init structured logger
-	logger := observability.NewLogger("processor-service", cfg.LogLevel)
-	logger.Info().
-		Str("port", cfg.Port).
-		Strs("brokers", cfg.RedpandaBrokers).
-		Strs("clickhouse_addrs", cfg.ClickhouseAddrs).
-		Str("redis_url", cfg.RedisURL).
-		Msg("starting processor service")
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// 3. Create HTTP server
-	app := server.NewServer(cfg.Port)
-
-	// 4. Initialize event consumer
-	anonymizer := processors.NewAnonymizer(cfg.AnonymizationSalt)
-	uaParser := processors.NewUserAgentParser()
-	redisOpts, err := redis.ParseURL(cfg.RedisURL)
+func newRedisClient(ctx context.Context, redisURL string, logger *zerolog.Logger) *redis.Client {
+	redisOpts, err := redis.ParseURL(redisURL)
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to parse redis URL")
 		os.Exit(1)
 	}
 
 	redisClient := redis.NewClient(redisOpts)
-
-	// Verify Redis connection
 	if err := redisClient.Ping(ctx).Err(); err != nil {
 		logger.Error().Err(err).Msg("failed to connect to redis")
 		os.Exit(1)
 	}
-	logger.Info().Msg("connected to redis")
 
-	defer func() {
-		if err := redisClient.Close(); err != nil {
-			logger.Error().Err(err).Msg("redis shutdown error")
-		}
-	}()
-	sessionMgr := processors.NewSessionManager(redisClient)
+	logger.Info().Msg("connected to redis")
+	return redisClient
+}
+
+func newClickHouseWriter(cfg config.ProcessorConfig, logger *zerolog.Logger) (*storage.ClickHouseWriter, bool) {
 	chWriter, err := storage.NewClickHouseWriter(storage.Options{
 		Addrs:            cfg.ClickhouseAddrs,
 		Database:         cfg.ClickhouseDatabase,
@@ -79,11 +52,14 @@ func main() {
 	})
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to initialize clickhouse writer")
-		return
+		return nil, false
 	}
 
-	processorPipeline := pipeline.NewPipeline(anonymizer, uaParser, sessionMgr, chWriter, logger)
-	dlqProducer, err := producer.NewRedpandaProducer(
+	return chWriter, true
+}
+
+func newDLQProducer(cfg config.ProcessorConfig, logger *zerolog.Logger) (*producer.RedpandaProducer, error) {
+	return producer.NewRedpandaProducer(
 		cfg.RedpandaBrokers,
 		producer.ConnectionOptions{
 			SASL: producer.SASLOptions{
@@ -102,15 +78,15 @@ func main() {
 		},
 		logger,
 	)
-	if err != nil {
-		logger.Error().Err(err).Msg("failed to initialize dlq producer")
-		if closeErr := chWriter.Close(); closeErr != nil {
-			logger.Error().Err(closeErr).Msg(clickhouseWriterShutdownErrorMsg)
-		}
-		return
-	}
+}
 
-	eventConsumer, err := consumer.NewEventConsumer(
+func newEventConsumer(
+	cfg config.ProcessorConfig,
+	dlqProducer *producer.RedpandaProducer,
+	processorPipeline *pipeline.Pipeline,
+	logger *zerolog.Logger,
+) (*consumer.EventConsumer, error) {
+	return consumer.NewEventConsumer(
 		cfg.RedpandaBrokers,
 		consumer.ConnectionOptions{
 			GroupID: cfg.ConsumerGroup,
@@ -136,12 +112,59 @@ func main() {
 		processorPipeline,
 		logger,
 	)
+}
+
+func main() {
+	// 1. Load configuration
+	cfg := config.LoadProcessorConfig()
+
+	// 2. Init structured logger
+	logger := observability.NewLogger("processor-service", cfg.LogLevel)
+	logger.Info().
+		Str("port", cfg.Port).
+		Strs("brokers", cfg.RedpandaBrokers).
+		Strs("clickhouse_addrs", cfg.ClickhouseAddrs).
+		Str("redis_url", cfg.RedisURL).
+		Msg("starting processor service")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// 3. Create HTTP server
+	app := server.NewServer(cfg.Port)
+
+	// 4. Initialize event consumer
+	anonymizer := processors.NewAnonymizer(cfg.AnonymizationSalt)
+	uaParser := processors.NewUserAgentParser()
+	redisClient := newRedisClient(ctx, cfg.RedisURL, logger)
+
+	defer func() {
+		//nolint:errcheck
+		redisClient.Close()
+	}()
+
+	sessionMgr := processors.NewSessionManager(redisClient)
+	chWriter, ok := newClickHouseWriter(cfg, logger)
+	if !ok {
+		return
+	}
+
+	processorPipeline := pipeline.NewPipeline(anonymizer, uaParser, sessionMgr, chWriter, logger)
+	dlqProducer, err := newDLQProducer(cfg, logger)
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to initialize dlq producer")
+		//nolint:errcheck
+		chWriter.Close()
+		return
+	}
+
+	eventConsumer, err := newEventConsumer(cfg, dlqProducer, processorPipeline, logger)
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to initialize consumer")
+		//nolint:errcheck
 		dlqProducer.Close()
-		if closeErr := chWriter.Close(); closeErr != nil {
-			logger.Error().Err(closeErr).Msg(clickhouseWriterShutdownErrorMsg)
-		}
+		//nolint:errcheck
+		chWriter.Close()
 		return
 	}
 
@@ -179,11 +202,12 @@ func main() {
 	cancel()
 	gracefulShutdown(app, logger)
 	consumerWG.Wait()
+	//nolint:errcheck
 	eventConsumer.Close()
+	//nolint:errcheck
 	dlqProducer.Close()
-	if err := chWriter.Close(); err != nil {
-		logger.Error().Err(err).Msg(clickhouseWriterShutdownErrorMsg)
-	}
+	//nolint:errcheck
+	chWriter.Close()
 
 	logger.Info().Msg("shutdown complete")
 }

@@ -7,10 +7,15 @@ import (
 	"github.com/google/uuid"
 )
 
+const (
+	testSiteID    = "site-1"
+	testVisitorID = "visitor-1"
+)
+
 func TestGetOrCreateSessionReturnsGeneratedIDWhenManagerIsNil(t *testing.T) {
 	var manager *SessionManager
 
-	sessionID, err := manager.GetOrCreateSession(context.Background(), "site-1", "visitor-1", 1700000000000)
+	sessionID, err := manager.GetOrCreateSession(context.Background(), testSiteID, testVisitorID, 1700000000000)
 	if err != nil {
 		t.Fatalf("GetOrCreateSession error = %v", err)
 	}
@@ -25,7 +30,7 @@ func TestGetOrCreateSessionReturnsGeneratedIDWhenManagerIsNil(t *testing.T) {
 func TestGetOrCreateSessionReturnsGeneratedIDWhenRedisClientIsNil(t *testing.T) {
 	manager := NewSessionManager(nil)
 
-	sessionID, err := manager.GetOrCreateSession(context.Background(), "site-1", "visitor-1", 1700000000000)
+	sessionID, err := manager.GetOrCreateSession(context.Background(), testSiteID, testVisitorID, 1700000000000)
 	if err != nil {
 		t.Fatalf("GetOrCreateSession error = %v", err)
 	}
@@ -38,8 +43,10 @@ func TestGetOrCreateSessionReturnsGeneratedIDWhenRedisClientIsNil(t *testing.T) 
 }
 
 func TestSessionKey(t *testing.T) {
-	got := sessionKey("site-1", "visitor-1")
-	if got != "session:site-1:visitor-1" {
-		t.Fatalf("sessionKey() = %q, want %q", got, "session:site-1:visitor-1")
+	const want = "session:" + testSiteID + ":" + testVisitorID
+
+	got := sessionKey(testSiteID, testVisitorID)
+	if got != want {
+		t.Fatalf("sessionKey() = %q, want %q", got, want)
 	}
 }
