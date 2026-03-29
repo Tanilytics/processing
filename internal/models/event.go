@@ -99,7 +99,7 @@ type ProcessedEvent struct {
 	UTMCampaign  string
 	Country      string
 	Region       string
-	DeviceType   string // desktop, mobile, tablet
+	DeviceType   string // desktop, mobile, tablet, bot
 	Browser      string
 	OS           string
 	ScreenWidth  uint16

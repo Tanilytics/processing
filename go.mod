@@ -5,6 +5,7 @@ go 1.26.0
 require (
 	github.com/ClickHouse/clickhouse-go/v2 v2.43.0
 	github.com/google/uuid v1.6.0
+	github.com/mileusna/useragent v1.3.5
 	github.com/redis/go-redis/v9 v9.18.0
 	github.com/rs/zerolog v1.34.0
 	github.com/stretchr/testify v1.11.1
