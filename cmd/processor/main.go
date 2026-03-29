@@ -18,6 +18,7 @@ import (
 	"github.com/Tanilytics/processing/internal/producer"
 	"github.com/Tanilytics/processing/internal/server"
 	"github.com/Tanilytics/processing/internal/storage"
+	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog"
 )
 
@@ -45,6 +46,27 @@ func main() {
 	// 4. Initialize event consumer
 	anonymizer := processors.NewAnonymizer(cfg.AnonymizationSalt)
 	uaParser := processors.NewUserAgentParser()
+	redisOpts, err := redis.ParseURL(cfg.RedisURL)
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to parse redis URL")
+		os.Exit(1)
+	}
+
+	redisClient := redis.NewClient(redisOpts)
+
+	// Verify Redis connection
+	if err := redisClient.Ping(ctx).Err(); err != nil {
+		logger.Error().Err(err).Msg("failed to connect to redis")
+		os.Exit(1)
+	}
+	logger.Info().Msg("connected to redis")
+
+	defer func() {
+		if err := redisClient.Close(); err != nil {
+			logger.Error().Err(err).Msg("redis shutdown error")
+		}
+	}()
+	sessionMgr := processors.NewSessionManager(redisClient)
 	chWriter, err := storage.NewClickHouseWriter(storage.Options{
 		Addrs:            cfg.ClickhouseAddrs,
 		Database:         cfg.ClickhouseDatabase,
@@ -60,7 +82,7 @@ func main() {
 		return
 	}
 
-	processorPipeline := pipeline.NewPipeline(anonymizer, uaParser, chWriter, logger)
+	processorPipeline := pipeline.NewPipeline(anonymizer, uaParser, sessionMgr, chWriter, logger)
 	dlqProducer, err := producer.NewRedpandaProducer(
 		cfg.RedpandaBrokers,
 		producer.ConnectionOptions{

@@ -529,6 +529,7 @@ func testPipeline() *pipeline.Pipeline {
 	return pipeline.NewPipeline(
 		processors.NewAnonymizer("test-salt"),
 		processors.NewUserAgentParser(),
+		nil,
 		writer,
 		&logger,
 	)
