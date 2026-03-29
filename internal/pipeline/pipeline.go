@@ -17,6 +17,7 @@ type Pipeline struct {
 	uaParser   *processors.UserAgentParser
 	sessionMgr *processors.SessionManager
 	chWriter   *storage.ClickHouseWriter
+	redisStore *storage.RedisStore
 	logger     *zerolog.Logger
 }
 
@@ -25,6 +26,7 @@ func NewPipeline(
 	uaParser *processors.UserAgentParser,
 	sessionMgr *processors.SessionManager,
 	chWriter *storage.ClickHouseWriter,
+	redisStore *storage.RedisStore,
 	logger *zerolog.Logger,
 ) *Pipeline {
 	return &Pipeline{
@@ -32,6 +34,7 @@ func NewPipeline(
 		uaParser:   uaParser,
 		sessionMgr: sessionMgr,
 		chWriter:   chWriter,
+		redisStore: redisStore,
 		logger:     logger,
 	}
 }
@@ -56,6 +59,12 @@ func (p *Pipeline) Process(ctx context.Context, events []*models.InternalEvent) 
 	// Step 5: Batch write to ClickHouse
 	if err := p.chWriter.WriteBatch(ctx, processed); err != nil {
 		return fmt.Errorf("clickhouse write: %w", err)
+	}
+
+	// Step 6: Update Redis counters
+	if err := p.redisStore.UpdateCounters(ctx, processed); err != nil {
+		// Redis counter failure is non-fatal —> log but don't fail the pipeline
+		p.logger.Error().Err(err).Msg("redis counter update failed")
 	}
 
 	return nil

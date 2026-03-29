@@ -531,6 +531,7 @@ func testPipeline() *pipeline.Pipeline {
 		processors.NewUserAgentParser(),
 		nil,
 		writer,
+		nil,
 		&logger,
 	)
 }

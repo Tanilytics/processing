@@ -59,6 +59,7 @@ func TestProcessEventDerivesUUIDAndClampsScreenWidth(t *testing.T) {
 		processors.NewUserAgentParser(),
 		nil,
 		writer,
+		nil,
 		&logger,
 	)
 
