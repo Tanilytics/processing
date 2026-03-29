@@ -1,6 +1,7 @@
 package pipeline
 
 import (
+	"context"
 	"testing"
 
 	"github.com/Tanilytics/processing/internal/models"
@@ -56,11 +57,12 @@ func TestProcessEventDerivesUUIDAndClampsScreenWidth(t *testing.T) {
 	p := NewPipeline(
 		processors.NewAnonymizer("test-salt"),
 		processors.NewUserAgentParser(),
+		nil,
 		writer,
 		&logger,
 	)
 
-	processed, err := p.processEvent(&models.InternalEvent{
+	processed, err := p.processEvent(context.Background(), &models.InternalEvent{
 		EventID:   invalidEventID,
 		SiteID:    "site-1",
 		VisitorID: "visitor-1",

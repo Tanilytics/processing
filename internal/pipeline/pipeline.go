@@ -15,6 +15,7 @@ import (
 type Pipeline struct {
 	anonymizer *processors.Anonymizer
 	uaParser   *processors.UserAgentParser
+	sessionMgr *processors.SessionManager
 	chWriter   *storage.ClickHouseWriter
 	logger     *zerolog.Logger
 }
@@ -22,12 +23,14 @@ type Pipeline struct {
 func NewPipeline(
 	anonymizer *processors.Anonymizer,
 	uaParser *processors.UserAgentParser,
+	sessionMgr *processors.SessionManager,
 	chWriter *storage.ClickHouseWriter,
 	logger *zerolog.Logger,
 ) *Pipeline {
 	return &Pipeline{
 		anonymizer: anonymizer,
 		uaParser:   uaParser,
+		sessionMgr: sessionMgr,
 		chWriter:   chWriter,
 		logger:     logger,
 	}
@@ -43,14 +46,14 @@ func (p *Pipeline) Process(ctx context.Context, events []*models.InternalEvent) 
 		default:
 		}
 
-		pe, err := p.processEvent(raw)
+		pe, err := p.processEvent(ctx, raw)
 		if err != nil {
 			return err
 		}
 		processed = append(processed, pe)
 	}
 
-	// Step 4: Batch write to ClickHouse
+	// Step 5: Batch write to ClickHouse
 	if err := p.chWriter.WriteBatch(ctx, processed); err != nil {
 		return fmt.Errorf("clickhouse write: %w", err)
 	}
@@ -58,7 +61,7 @@ func (p *Pipeline) Process(ctx context.Context, events []*models.InternalEvent) 
 	return nil
 }
 
-func (p *Pipeline) processEvent(raw *models.InternalEvent) (*models.ProcessedEvent, error) {
+func (p *Pipeline) processEvent(ctx context.Context, raw *models.InternalEvent) (*models.ProcessedEvent, error) {
 	// Step 1: Anonymize IP
 	ipHash, country, region := p.anonymizer.Anonymize(raw.IP)
 
@@ -71,11 +74,23 @@ func (p *Pipeline) processEvent(raw *models.InternalEvent) (*models.ProcessedEve
 		p.logger.Debug().Str("event_id", raw.EventID).Str("derived_uuid", eventID.String()).Msg("derived uuid from event id")
 	}
 
+	// Step 4: Session stitching
+	sessionID, err := p.sessionMgr.GetOrCreateSession(ctx, raw.SiteID, raw.VisitorID, raw.Timestamp)
+	if err != nil {
+		p.logger.Error().
+			Err(err).
+			Str("site_id", raw.SiteID).
+			Str("visitor_id", raw.VisitorID).
+			Msg("session stitching failed")
+		// Use a fallback session ID so we don't lose the event
+		sessionID = "unknown"
+	}
+
 	return &models.ProcessedEvent{
 		EventID:      eventID,
 		SiteID:       raw.SiteID,
 		VisitorID:    raw.VisitorID,
-		SessionID:    "unknown",
+		SessionID:    sessionID,
 		EventType:    raw.EventType,
 		Timestamp:    time.UnixMilli(raw.Timestamp),
 		URL:          raw.URL,

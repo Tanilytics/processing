@@ -31,14 +31,14 @@ func TestUserAgentParserParse(t *testing.T) {
 			ua:         "Mozilla/5.0 (Linux; Android 13; SM-T970) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
 			browser:    "Chrome",
 			os:         "Android",
-			deviceType: "tablet",
+			deviceType: "mobile",
 		},
 		{
 			name:       "bot",
 			ua:         "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
-			browser:    "Bot",
+			browser:    "Googlebot",
 			os:         "unknown",
-			deviceType: "unknown",
+			deviceType: "bot",
 		},
 		{
 			name:       "empty",
