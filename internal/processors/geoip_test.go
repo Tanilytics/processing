@@ -28,10 +28,10 @@ func TestGeoIPResolverResolvePublicIP(t *testing.T) {
 
 	country, region := resolver.Resolve("81.2.69.142")
 
-	if country != "GB" {
+	if country != "United Kingdom" {
 		t.Fatalf("country = %q, want %q", country, "GB")
 	}
-	if region != "ENG" {
+	if region != "England" {
 		t.Fatalf("region = %q, want %q", region, "ENG")
 	}
 }
