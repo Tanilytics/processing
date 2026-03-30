@@ -9,29 +9,26 @@ import (
 
 type Anonymizer struct {
 	dailySalt string // use a static salt for simplicity. will add rotation later
+	geoIP     *GeoIPResolver
 }
 
-func NewAnonymizer(salt string) *Anonymizer {
-	return &Anonymizer{dailySalt: salt}
+func NewAnonymizer(salt string, geoIP *GeoIPResolver) *Anonymizer {
+	return &Anonymizer{dailySalt: salt, geoIP: geoIP}
 }
 
 // Anonymize truncates the IP and returns a hash + geo data.
 // geo lookup is stubbed. will add MaxMind GeoIP later
 func (a *Anonymizer) Anonymize(rawIP string) (ipHash, country, region string) {
 	truncated := truncateIP(rawIP)
-	if truncated == "" {
-		// Keep IP as unknown when parsing fails.
-		country = ""
-		region = ""
-		return
+
+	// Geo lookup on truncated IP (before discarding)
+	if a.geoIP != nil {
+		country, region = a.geoIP.Resolve(truncated)
 	}
 
 	hash := sha256.Sum256([]byte(truncated + a.dailySalt))
 	ipHash = fmt.Sprintf("%x", hash[:16]) // 32-char hex
 
-	// returns empty strings
-	country = ""
-	region = ""
 	return
 }
 

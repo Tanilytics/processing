@@ -27,7 +27,7 @@ func TestTruncateIP(t *testing.T) {
 }
 
 func TestAnonymizeUsesTruncatedIPv4Range(t *testing.T) {
-	a := NewAnonymizer("test-salt")
+	a := NewAnonymizer("test-salt", nil)
 
 	firstHash, firstCountry, firstRegion := a.Anonymize("192.168.1.123")
 	secondHash, secondCountry, secondRegion := a.Anonymize("192.168.1.200")
@@ -51,8 +51,8 @@ func TestAnonymizeUsesTruncatedIPv4Range(t *testing.T) {
 }
 
 func TestAnonymizeIncludesSaltInHash(t *testing.T) {
-	first := NewAnonymizer("salt-a")
-	second := NewAnonymizer("salt-b")
+	first := NewAnonymizer("salt-a", nil)
+	second := NewAnonymizer("salt-b", nil)
 
 	firstHash, _, _ := first.Anonymize("203.0.113.7")
 	secondHash, _, _ := second.Anonymize("203.0.113.7")

@@ -55,7 +55,7 @@ func TestProcessEventDerivesUUIDAndClampsScreenWidth(t *testing.T) {
 	}
 	logger := zerolog.Nop()
 	p := NewPipeline(
-		processors.NewAnonymizer("test-salt"),
+		processors.NewAnonymizer("test-salt", nil),
 		processors.NewUserAgentParser(),
 		nil,
 		writer,

@@ -21,6 +21,9 @@ WORKDIR /app
 
 COPY --from=builder /app/bin/processor/ /bin/processor
 
+# GeoIP Database
+COPY data/GeoLite2-City.mmdb /data/GeoLite2-City.mmdb
+
 RUN chown -R appuser:appuser /app
 
 USER appuser

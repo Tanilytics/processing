@@ -527,7 +527,7 @@ func testPipeline() *pipeline.Pipeline {
 	}
 	logger := zerolog.Nop()
 	return pipeline.NewPipeline(
-		processors.NewAnonymizer("test-salt"),
+		processors.NewAnonymizer("test-salt", nil),
 		processors.NewUserAgentParser(),
 		nil,
 		writer,
