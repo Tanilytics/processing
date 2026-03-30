@@ -134,7 +134,16 @@ func main() {
 	app := server.NewServer(cfg.Port)
 
 	// 4. Initialize event consumer
-	anonymizer := processors.NewAnonymizer(cfg.AnonymizationSalt)
+	geoIP, err := processors.NewGeoIPResolver(cfg.GeoIPDBPath)
+	if err != nil {
+		logger.Error().Err(err).Msg("failed to initialize geoip resolver")
+		return
+	}
+	defer func() {
+		//nolint:errcheck
+		geoIP.Close()
+	}()
+	anonymizer := processors.NewAnonymizer(cfg.AnonymizationSalt, geoIP)
 	uaParser := processors.NewUserAgentParser()
 	redisClient := newRedisClient(ctx, cfg.RedisURL, logger)
 	redisStore := storage.NewRedisStore(redisClient)

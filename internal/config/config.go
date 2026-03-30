@@ -47,8 +47,9 @@ type ProcessorConfig struct {
 	ClickhouseMaxIdleConns         int
 	ClickhouseConnOpenStrategy     string
 	RedisURL                       string
-	AnonymizationSalt              string
 	LogLevel                       string
+	AnonymizationSalt              string
+	GeoIPDBPath                    string
 }
 
 func LoadProcessorConfig() ProcessorConfig {
@@ -90,6 +91,7 @@ func LoadProcessorConfig() ProcessorConfig {
 		RedisURL:                     getEnv("REDIS_URL"),
 		LogLevel:                     getEnv("LOG_LEVEL"),
 		AnonymizationSalt:            getEnv("ANONYMIZATION_SALT"),
+		GeoIPDBPath:                  getEnv("GEOIP_DB_PATH"),
 	}
 }
 
