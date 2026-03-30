@@ -18,6 +18,12 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - name: Download GeoLite2 City database
+        if: ${{ secrets.MAXMIND_LICENSE_KEY != '' }}
+        env:
+          MAXMIND_LICENSE_KEY: ${{ secrets.MAXMIND_LICENSE_KEY }}
+        run: mkdir -p data && curl -fsSL "https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-City&license_key=${MAXMIND_LICENSE_KEY}&suffix=tar.gz" -o /tmp/GeoLite2-City.tar.gz && tar -xzf /tmp/GeoLite2-City.tar.gz --strip-components=1 -C data --wildcards '*/GeoLite2-City.mmdb'
+
       - name: go vet
         run: go vet ./...
 
