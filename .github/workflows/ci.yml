@@ -19,9 +19,7 @@ jobs:
           cache: true
 
       - name: Download GeoLite2 City database
-        env:
-          MAXMIND_LICENSE_KEY: ${{ secrets.MAXMIND_LICENSE_KEY }}
-        run: mkdir -p data && curl -fsSL "https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-City&license_key=${MAXMIND_LICENSE_KEY}&suffix=tar.gz" -o /tmp/GeoLite2-City.tar.gz && tar -xzf /tmp/GeoLite2-City.tar.gz --strip-components=1 -C data --wildcards '*/GeoLite2-City.mmdb'
+        run: mkdir -p data && cd data && wget -nv -O- "https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-City&license_key=${{ secrets.MAXMIND_LICENSE_KEY }}&suffix=tar.gz" | tar zxv
 
       - name: go vet
         run: go vet ./...
