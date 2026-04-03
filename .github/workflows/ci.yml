@@ -36,6 +36,13 @@ jobs:
       - name: go test
         run: go test ./...
 
+      - name: Upload GeoLite2 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: geolite2-city-mmdb
+          path: data/GeoLite2-City.mmdb
+          if-no-files-found: error
+
   lint:
     name: Lint
     runs-on: ubuntu-latest
@@ -64,6 +71,12 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+
+      - name: Download GeoLite2 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: geolite2-city-mmdb
+          path: data
 
       - name: Build Docker image (no push)
         if: github.event_name == 'pull_request'
