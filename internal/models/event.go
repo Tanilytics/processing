@@ -21,18 +21,8 @@ const (
 	EventMediaProgress EventType = "media_progress"
 	EventMediaBuffer   EventType = "media_buffer"
 	EventMediaComplete EventType = "media_complete"
-	EventCustom        EventType = "custom"
+	EventFormSubmit    EventType = "form_submit"
 )
-
-// ValidEventTypes is used for validation.
-var ValidEventTypes = map[EventType]bool{
-	EventPageView: true, EventPageLeave: true,
-	EventClick: true, EventScroll: true,
-	EventMediaPlay: true, EventMediaPause: true,
-	EventMediaSeek: true, EventMediaProgress: true,
-	EventMediaBuffer: true, EventMediaComplete: true,
-	EventCustom: true,
-}
 
 // SessionContext holds device/browser context from the SDK.
 type SessionContext struct {
@@ -40,27 +30,6 @@ type SessionContext struct {
 	ScreenHeight int    `json:"screen_height"`
 	Language     string `json:"language"`
 	Timezone     string `json:"timezone"`
-}
-
-// EventBatch is the HTTP inbound payload from the SDK.
-type EventBatch struct {
-	SiteID         string         `json:"site_id"`
-	VisitorID      string         `json:"visitor_id"`
-	SessionContext SessionContext `json:"session_context"`
-	Events         []RawEvent     `json:"events"`
-}
-
-// RawEvent is a single event as received from the SDK.
-type RawEvent struct {
-	EventID     string          `json:"event_id"`
-	EventType   EventType       `json:"event_type"`
-	Timestamp   int64           `json:"timestamp"` // Unix milliseconds
-	URL         string          `json:"url"`
-	Referrer    string          `json:"referrer,omitempty"`
-	UTMSource   string          `json:"utm_source,omitempty"`
-	UTMMedium   string          `json:"utm_medium,omitempty"`
-	UTMCampaign string          `json:"utm_campaign,omitempty"`
-	Properties  json.RawMessage `json:"properties,omitempty"`
 }
 
 // InternalEvent is the enriched event produced to Redpanda.
