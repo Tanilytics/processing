@@ -190,7 +190,8 @@ func TestInternalEventUnmarshal(t *testing.T) {
 		"event_id": "evt-123",
 		"site_id": "site-456",
 		"visitor_id": "vis-789",
-		"event_type": "page_view",
+		"event_type": "custom",
+		"event_name": "test_new_track",
 		"timestamp": 1700000000000,
 		"url": "https://example.com/page",
 		"referrer": "https://google.com",
@@ -216,7 +217,8 @@ func TestInternalEventUnmarshal(t *testing.T) {
 	assert.Equal(t, "evt-123", event.EventID)
 	assert.Equal(t, "site-456", event.SiteID)
 	assert.Equal(t, "vis-789", event.VisitorID)
-	assert.Equal(t, models.EventPageView, event.EventType)
+	assert.Equal(t, models.EventCustom, event.EventType)
+	assert.Equal(t, "test_new_track", event.EventName)
 	assert.Equal(t, int64(1700000000000), event.Timestamp)
 	assert.Equal(t, "https://example.com/page", event.URL)
 	assert.Equal(t, "https://google.com", event.Referrer)
@@ -248,6 +250,7 @@ func TestInternalEventUnmarshalMinimalEvent(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "evt-min", event.EventID)
 	assert.Equal(t, models.EventClick, event.EventType)
+	assert.Empty(t, event.EventName)
 	assert.Empty(t, event.Referrer)
 	assert.Empty(t, event.UTMSource)
 	assert.Empty(t, event.IP)

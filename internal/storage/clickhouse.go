@@ -80,7 +80,7 @@ func parseConnOpenStrategy(value string) (clickhouse.ConnOpenStrategy, error) {
 func (w *ClickHouseWriter) WriteBatch(ctx context.Context, events []*models.ProcessedEvent) error {
 	batch, err := w.conn.PrepareBatch(ctx, `
 		INSERT INTO events (
-			event_id, site_id, visitor_id, session_id, event_type, timestamp,
+			event_id, site_id, visitor_id, session_id, event_type, event_name, timestamp,
 			url, referrer, utm_source, utm_medium, utm_campaign,
 			country, region, device_type, browser, os, screen_width,
 			properties, ip_hash, consent_given
@@ -92,7 +92,7 @@ func (w *ClickHouseWriter) WriteBatch(ctx context.Context, events []*models.Proc
 
 	for _, e := range events {
 		if err := batch.Append(
-			e.EventID, e.SiteID, e.VisitorID, e.SessionID, string(e.EventType),
+			e.EventID, e.SiteID, e.VisitorID, e.SessionID, string(e.EventType), e.EventName,
 			e.Timestamp,
 			e.URL, e.Referrer, e.UTMSource, e.UTMMedium, e.UTMCampaign,
 			e.Country, e.Region, e.DeviceType, e.Browser, e.OS, e.ScreenWidth,

@@ -101,6 +101,7 @@ func (p *Pipeline) processEvent(ctx context.Context, raw *models.InternalEvent) 
 		VisitorID:    raw.VisitorID,
 		SessionID:    sessionID,
 		EventType:    raw.EventType,
+		EventName:    raw.EventName,
 		Timestamp:    time.UnixMilli(raw.Timestamp),
 		URL:          raw.URL,
 		Referrer:     raw.Referrer,
