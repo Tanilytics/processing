@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     name: Test
@@ -32,6 +36,13 @@ jobs:
       - name: go test
         run: go test ./...
 
+      - name: Upload GeoLite2 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: geolite2-city-mmdb
+          path: data/GeoLite2-City.mmdb
+          if-no-files-found: error
+
   lint:
     name: Lint
     runs-on: ubuntu-latest
@@ -47,3 +58,49 @@ jobs:
         uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20 # v9.2.0
         with:
           version: v2.11.3
+
+  docker-build:
+    runs-on: ubuntu-latest
+    name: Docker Build
+    timeout-minutes: 20
+    needs: [ test, lint ]
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+        with:
+          fetch-depth: 0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Download GeoLite2 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: geolite2-city-mmdb
+          path: data
+
+      - name: Build Docker image (no push)
+        if: github.event_name == 'pull_request'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          tags: processing:pr-${{ github.sha }}
+
+      - name: Login to Docker Hub
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and Push to Docker Hub
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/processing:${{ github.sha }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/processing:latest
+          cache-from: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/processing:buildcache
+          cache-to: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/processing:buildcache,mode=max
