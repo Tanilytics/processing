@@ -14,6 +14,7 @@ const (
 	EventPageView      EventType = "page_view"
 	EventPageLeave     EventType = "page_leave"
 	EventClick         EventType = "click"
+	EventCustom        EventType = "custom"
 	EventScroll        EventType = "scroll"
 	EventMediaPlay     EventType = "media_play"
 	EventMediaPause    EventType = "media_pause"
@@ -70,6 +71,7 @@ type InternalEvent struct {
 	SiteID          string          `json:"site_id"`
 	VisitorID       string          `json:"visitor_id"`
 	EventType       EventType       `json:"event_type"`
+	EventName       string          `json:"event_name,omitempty"`
 	Timestamp       int64           `json:"timestamp"`
 	URL             string          `json:"url"`
 	Referrer        string          `json:"referrer,omitempty"`
@@ -91,6 +93,7 @@ type ProcessedEvent struct {
 	VisitorID    string
 	SessionID    string
 	EventType    EventType
+	EventName    string
 	Timestamp    time.Time
 	URL          string
 	Referrer     string

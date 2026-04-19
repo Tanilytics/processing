@@ -90,6 +90,9 @@ func TestProcessEventDerivesUUIDAndClampsScreenWidth(t *testing.T) {
 	if processed.DeviceType != "mobile" {
 		t.Fatalf("DeviceType = %q, want %q", processed.DeviceType, "mobile")
 	}
+	if processed.EventName != "" {
+		t.Fatalf("EventName = %q, want empty", processed.EventName)
+	}
 	if processed.Browser != "Safari" {
 		t.Fatalf("Browser = %q, want %q", processed.Browser, "Safari")
 	}
@@ -98,6 +101,52 @@ func TestProcessEventDerivesUUIDAndClampsScreenWidth(t *testing.T) {
 	}
 	if processed.IPHash == "" {
 		t.Fatal("expected IPHash to be set")
+	}
+}
+
+func TestProcessEventPreservesCustomEventName(t *testing.T) {
+	writer, err := storage.NewClickHouseWriter(storage.Options{
+		Addrs:            []string{"some-addr"},
+		Database:         "default",
+		Username:         "default",
+		Password:         "test-password",
+		MaxOpenConns:     10,
+		MaxIdleConns:     5,
+		ConnOpenStrategy: "in_order",
+	})
+	if err != nil {
+		t.Fatalf("failed to create writer: %v", err)
+	}
+	logger := zerolog.Nop()
+	p := NewPipeline(
+		processors.NewAnonymizer("test-salt", nil),
+		processors.NewUserAgentParser(),
+		nil,
+		writer,
+		nil,
+		&logger,
+	)
+
+	processed, err := p.processEvent(context.Background(), &models.InternalEvent{
+		EventID:   invalidEventID,
+		SiteID:    "site-1",
+		VisitorID: "visitor-1",
+		EventType: models.EventCustom,
+		EventName: "test_new_track",
+		Timestamp: 1700000000000,
+		URL:       "https://example.com",
+		IP:        "192.168.1.12",
+		UserAgent: "Mozilla/5.0",
+	})
+	if err != nil {
+		t.Fatalf("processEvent error = %v", err)
+	}
+
+	if processed.EventType != models.EventCustom {
+		t.Fatalf("EventType = %q, want %q", processed.EventType, models.EventCustom)
+	}
+	if processed.EventName != "test_new_track" {
+		t.Fatalf("EventName = %q, want %q", processed.EventName, "test_new_track")
 	}
 }
 
