@@ -16,7 +16,7 @@ type Pipeline struct {
 	anonymizer *processors.Anonymizer
 	uaParser   *processors.UserAgentParser
 	sessionMgr *processors.SessionManager
-	chWriter   *storage.ClickHouseWriter
+	hdfsWriter *storage.HDFSWriter
 	redisStore *storage.RedisStore
 	logger     *zerolog.Logger
 }
@@ -25,7 +25,7 @@ func NewPipeline(
 	anonymizer *processors.Anonymizer,
 	uaParser *processors.UserAgentParser,
 	sessionMgr *processors.SessionManager,
-	chWriter *storage.ClickHouseWriter,
+	hdfsWriter *storage.HDFSWriter,
 	redisStore *storage.RedisStore,
 	logger *zerolog.Logger,
 ) *Pipeline {
@@ -33,7 +33,7 @@ func NewPipeline(
 		anonymizer: anonymizer,
 		uaParser:   uaParser,
 		sessionMgr: sessionMgr,
-		chWriter:   chWriter,
+		hdfsWriter: hdfsWriter,
 		redisStore: redisStore,
 		logger:     logger,
 	}
@@ -56,9 +56,9 @@ func (p *Pipeline) Process(ctx context.Context, events []*models.InternalEvent) 
 		processed = append(processed, pe)
 	}
 
-	// Step 5: Batch write to ClickHouse
-	if err := p.chWriter.WriteBatch(ctx, processed); err != nil {
-		return fmt.Errorf("clickhouse write: %w", err)
+	// Step 5: Batch write to HDFS
+	if err := p.hdfsWriter.WriteBatch(ctx, processed); err != nil {
+		return fmt.Errorf("hdfs write: %w", err)
 	}
 
 	// Step 6: Update Redis counters

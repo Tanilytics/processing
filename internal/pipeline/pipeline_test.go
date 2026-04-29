@@ -6,7 +6,6 @@ import (
 
 	"github.com/Tanilytics/processing/internal/models"
 	"github.com/Tanilytics/processing/internal/processors"
-	"github.com/Tanilytics/processing/internal/storage"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 )
@@ -16,25 +15,12 @@ const invalidEventID = "evt-123"
 func newTestPipeline(t *testing.T) *Pipeline {
 	t.Helper()
 
-	writer, err := storage.NewClickHouseWriter(storage.Options{
-		Addrs:            []string{"some-addr"},
-		Database:         "default",
-		Username:         "default",
-		Password:         "test-password",
-		MaxOpenConns:     10,
-		MaxIdleConns:     5,
-		ConnOpenStrategy: "in_order",
-	})
-	if err != nil {
-		t.Fatalf("failed to create writer: %v", err)
-	}
-
 	logger := zerolog.Nop()
 	return NewPipeline(
 		processors.NewAnonymizer("test-salt", nil),
 		processors.NewUserAgentParser(),
 		nil,
-		writer,
+		nil,
 		nil,
 		&logger,
 	)

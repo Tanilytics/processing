@@ -39,23 +39,18 @@ func newRedisClient(ctx context.Context, redisURL string, logger *zerolog.Logger
 	return redisClient
 }
 
-func newClickHouseWriter(cfg config.ProcessorConfig, logger *zerolog.Logger) (*storage.ClickHouseWriter, bool) {
-	chWriter, err := storage.NewClickHouseWriter(storage.Options{
-		Addrs:            cfg.ClickhouseAddrs,
-		Database:         cfg.ClickhouseDatabase,
-		Username:         cfg.ClickhouseUsername,
-		Password:         cfg.ClickhousePassword,
-		DialTimeout:      cfg.ClickhouseDialTimeout,
-		MaxOpenConns:     cfg.ClickhouseMaxOpenConns,
-		MaxIdleConns:     cfg.ClickhouseMaxIdleConns,
-		ConnOpenStrategy: cfg.ClickhouseConnOpenStrategy,
+func newHDFSWriter(cfg config.ProcessorConfig, logger *zerolog.Logger) (*storage.HDFSWriter, bool) {
+	w, err := storage.NewHDFSWriter(storage.HDFSOptions{
+		NameNodeAddr: cfg.HDFSNameNodeAddr,
+		User:         cfg.HDFSUser,
+		BasePath:     cfg.HDFSBasePath,
 	})
 	if err != nil {
-		logger.Error().Err(err).Msg("failed to initialize clickhouse writer")
+		logger.Error().Err(err).Msg("failed to initialize hdfs writer")
 		return nil, false
 	}
 
-	return chWriter, true
+	return w, true
 }
 
 func newDLQProducer(cfg config.ProcessorConfig, logger *zerolog.Logger) (*producer.RedpandaProducer, error) {
@@ -105,8 +100,8 @@ func newEventConsumer(
 			FetchMaxPartitionBytes: cfg.ConsumerFetchMaxPartitionBytes,
 			BlockRebalanceOnPoll:   cfg.ConsumerBlockRebalanceOnPoll,
 			MaxConcurrentFetches:   cfg.ConsumerMaxConcurrentFetches,
-			BatchSize:              cfg.ClickhouseBatchSize,
-			BatchTimeout:           cfg.ClickhouseBatchTimeout,
+			BatchSize:              cfg.ConsumerBatchSize,
+			BatchTimeout:           cfg.ConsumerBatchTimeout,
 		},
 		dlqProducer,
 		processorPipeline,
@@ -123,7 +118,7 @@ func main() {
 	logger.Info().
 		Str("port", cfg.Port).
 		Strs("brokers", cfg.RedpandaBrokers).
-		Strs("clickhouse_addrs", cfg.ClickhouseAddrs).
+		Str("hdfs_namenode", cfg.HDFSNameNodeAddr).
 		Str("redis_url", cfg.RedisURL).
 		Msg("starting processor service")
 
@@ -154,17 +149,17 @@ func main() {
 	}()
 
 	sessionMgr := processors.NewSessionManager(redisClient)
-	chWriter, ok := newClickHouseWriter(cfg, logger)
+	hdfsWriter, ok := newHDFSWriter(cfg, logger)
 	if !ok {
 		return
 	}
 
-	processorPipeline := pipeline.NewPipeline(anonymizer, uaParser, sessionMgr, chWriter, redisStore, logger)
+	processorPipeline := pipeline.NewPipeline(anonymizer, uaParser, sessionMgr, hdfsWriter, redisStore, logger)
 	dlqProducer, err := newDLQProducer(cfg, logger)
 	if err != nil {
 		logger.Error().Err(err).Msg("failed to initialize dlq producer")
 		//nolint:errcheck
-		chWriter.Close()
+		hdfsWriter.Close()
 		return
 	}
 
@@ -174,7 +169,7 @@ func main() {
 		//nolint:errcheck
 		dlqProducer.Close()
 		//nolint:errcheck
-		chWriter.Close()
+		hdfsWriter.Close()
 		return
 	}
 
@@ -217,7 +212,7 @@ func main() {
 	//nolint:errcheck
 	dlqProducer.Close()
 	//nolint:errcheck
-	chWriter.Close()
+	hdfsWriter.Close()
 
 	logger.Info().Msg("shutdown complete")
 }

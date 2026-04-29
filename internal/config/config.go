@@ -36,16 +36,11 @@ type ProcessorConfig struct {
 	ConsumerFetchMaxPartitionBytes int32
 	ConsumerBlockRebalanceOnPoll   bool
 	ConsumerMaxConcurrentFetches   int
-	ClickhouseAddrs                []string
-	ClickhouseDatabase             string
-	ClickhouseUsername             string
-	ClickhousePassword             string
-	ClickhouseDialTimeout          time.Duration
-	ClickhouseBatchSize            int
-	ClickhouseBatchTimeout         time.Duration
-	ClickhouseMaxOpenConns         int
-	ClickhouseMaxIdleConns         int
-	ClickhouseConnOpenStrategy     string
+	ConsumerBatchSize              int
+	ConsumerBatchTimeout           time.Duration
+	HDFSNameNodeAddr               string
+	HDFSUser                       string
+	HDFSBasePath                   string
 	RedisURL                       string
 	LogLevel                       string
 	AnonymizationSalt              string
@@ -78,16 +73,11 @@ func LoadProcessorConfig() ProcessorConfig {
 			"CONSUMER_BLOCK_REBALANCE_ON_POLL",
 		),
 		ConsumerMaxConcurrentFetches: getEnvInt("CONSUMER_MAX_CONCURRENT_FETCHES"),
-		ClickhouseAddrs:              getEnvCSV("CLICKHOUSE_ADDRS"),
-		ClickhouseDatabase:           getEnv("CLICKHOUSE_DATABASE"),
-		ClickhouseUsername:           getEnv("CLICKHOUSE_USERNAME"),
-		ClickhousePassword:           getEnv("CLICKHOUSE_PASSWORD"),
-		ClickhouseDialTimeout:        getEnvDuration("CLICKHOUSE_DIAL_TIMEOUT"),
-		ClickhouseBatchSize:          getEnvInt("CH_BATCH_SIZE"),
-		ClickhouseBatchTimeout:       getEnvDuration("CH_BATCH_TIMEOUT"),
-		ClickhouseMaxOpenConns:       getEnvInt("CLICKHOUSE_MAX_OPEN_CONNS"),
-		ClickhouseMaxIdleConns:       getEnvInt("CLICKHOUSE_MAX_IDLE_CONNS"),
-		ClickhouseConnOpenStrategy:   getEnv("CLICKHOUSE_CONN_OPEN_STRATEGY"),
+		ConsumerBatchSize:            getEnvInt("CONSUMER_BATCH_SIZE"),
+		ConsumerBatchTimeout:         getEnvDuration("CONSUMER_BATCH_TIMEOUT"),
+		HDFSNameNodeAddr:             getEnv("HDFS_NAMENODE_ADDR"),
+		HDFSUser:                     getEnv("HDFS_USER"),
+		HDFSBasePath:                 getEnv("HDFS_BASE_PATH"),
 		RedisURL:                     getEnv("REDIS_URL"),
 		LogLevel:                     getEnv("LOG_LEVEL"),
 		AnonymizationSalt:            getEnv("ANONYMIZATION_SALT"),

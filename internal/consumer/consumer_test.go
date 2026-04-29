@@ -10,7 +10,6 @@ import (
 	"github.com/Tanilytics/processing/internal/models"
 	"github.com/Tanilytics/processing/internal/pipeline"
 	"github.com/Tanilytics/processing/internal/processors"
-	"github.com/Tanilytics/processing/internal/storage"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -516,24 +515,12 @@ func invalidResetOptions() Options {
 }
 
 func testPipeline() *pipeline.Pipeline {
-	writer, err := storage.NewClickHouseWriter(storage.Options{
-		Addrs:            []string{"some-addr"},
-		Database:         "default",
-		Username:         "default",
-		Password:         "test-password",
-		MaxOpenConns:     10,
-		MaxIdleConns:     5,
-		ConnOpenStrategy: "in_order",
-	})
-	if err != nil {
-		panic(err)
-	}
 	logger := zerolog.Nop()
 	return pipeline.NewPipeline(
 		processors.NewAnonymizer("test-salt", nil),
 		processors.NewUserAgentParser(),
 		nil,
-		writer,
+		nil,
 		nil,
 		&logger,
 	)
