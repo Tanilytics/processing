@@ -38,6 +38,7 @@ func TestRedisStoreUpdateCountersForPageView(t *testing.T) {
 	mock.ExpectZAdd(activeKey, redis.Z{Score: float64(eventTS.UnixMilli()), Member: event.VisitorID}).SetVal(1)
 	mock.Regexp().ExpectZRemRangeByScore(activeKey, "-inf", `^[0-9]+\.000000$`).SetVal(0)
 	mock.ExpectExpire(activeKey, 10*time.Minute).SetVal(true)
+	mock.Regexp().ExpectPublish("rt:site-1", `^\{"type":"realtime_counters_updated","siteId":"site-1","eventCount":1,"publishedAt":"[^"]+"\}$`).SetVal(1)
 
 	err := store.UpdateCounters(context.Background(), []*models.ProcessedEvent{event})
 	require.NoError(t, err)
@@ -62,6 +63,7 @@ func TestRedisStoreUpdateCountersSkipsPageViewCountersForOtherEvents(t *testing.
 	mock.ExpectZAdd(activeKey, redis.Z{Score: float64(eventTS.UnixMilli()), Member: event.VisitorID}).SetVal(1)
 	mock.Regexp().ExpectZRemRangeByScore(activeKey, "-inf", `^[0-9]+\.000000$`).SetVal(0)
 	mock.ExpectExpire(activeKey, 10*time.Minute).SetVal(true)
+	mock.Regexp().ExpectPublish("rt:site-1", `^\{"type":"realtime_counters_updated","siteId":"site-1","eventCount":1,"publishedAt":"[^"]+"\}$`).SetVal(1)
 
 	err := store.UpdateCounters(context.Background(), []*models.ProcessedEvent{event})
 	require.NoError(t, err)
